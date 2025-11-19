@@ -160,7 +160,7 @@ weekly_boss_data = [
     ("Milavy", ["Saturday 15:00"]),
     ("Ringor", ["Saturday 17:00"]),
     ("Roderick", ["Friday 19:00"]),
-    ("Auraq", ["Sunday 21:00", "Wednesday 21:00", "Wednesday 17:30"]),
+    ("Auraq", ["Sunday 21:00", "Wednesday 21:00"]),
     ("Chaiflock", ["Saturday 22:00"]),
 ]
 
@@ -429,6 +429,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
