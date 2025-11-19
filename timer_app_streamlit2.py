@@ -114,6 +114,18 @@ class TimerEntry:
             return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
         return f"{hours:02}:{minutes:02}:{seconds:02}"
 
+# Helper for weekly countdown formatting
+def format_timedelta(td: timedelta) -> str:
+    total_seconds = int(td.total_seconds())
+    if total_seconds < 0:
+        return "00:00:00"
+    days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if days > 0:
+        return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
 # ------------------- Build Timers -------------------
 def build_timers():
     return [TimerEntry(*data) for data in load_boss_data()]
@@ -126,117 +138,6 @@ st_autorefresh(interval=1000, key="timer_refresh")
 if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
-
-# ------------------- Next Boss Banner -------------------
-def next_boss_banner(timers_list):
-    for t in timers_list:
-        t.update_next()
-
-    next_timer = min(timers_list, key=lambda x: x.countdown())
-    remaining = next_timer.countdown().total_seconds()
-
-    # Color logic for countdown
-    if remaining <= 60:
-        cd_color = "red"
-    elif remaining <= 300:
-        cd_color = "orange"
-    else:
-        cd_color = "limegreen"
-
-    time_only = next_timer.next_time.strftime("%I:%M %p")
-
-    st.markdown(
-        f"""
-        <style>
-        .banner-container {{
-            display: flex;
-            justify-content: center;
-            margin: 20px 0 5px 0;
-        }}
-        .boss-banner {{
-            background: linear-gradient(90deg, #0f172a, #1d4ed8, #16a34a);
-            padding: 14px 28px;
-            border-radius: 999px;
-            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.75);
-            color: #f9fafb;
-            display: inline-flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-        }}
-        .boss-banner-title {{
-            font-size: 28px;
-            font-weight: 800;
-            margin: 0;
-            letter-spacing: 0.03em;
-        }}
-        .boss-banner-row {{
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            font-size: 18px;
-        }}
-        .banner-chip {{
-            padding: 4px 12px;
-            border-radius: 999px;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.7);
-        }}
-        </style>
-
-        <div class="banner-container">
-            <div class="boss-banner">
-                <h2 class="boss-banner-title">
-                    Next Boss: <strong>{next_timer.name}</strong>
-                </h2>
-                <div class="boss-banner-row">
-                    <span class="banner-chip">
-                        🕒 <strong>{time_only}</strong>
-                    </span>
-                    <span class="banner-chip" style="color:{cd_color}; border-color:{cd_color};">
-                        ⏳ <strong>{next_timer.format_countdown()}</strong>
-                    </span>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-next_boss_banner(timers)
-
-# ------------------- Auto-Sorted Table -------------------
-def display_boss_table_sorted(timers_list):
-    for t in timers_list:
-        t.update_next()
-
-    timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
-
-    # Build colored countdown values cleanly
-    countdown_cells = []
-    for t in timers_sorted:
-        secs = t.countdown().total_seconds()
-        if secs <= 60:
-            color = "red"
-        elif secs <= 300:
-            color = "orange"
-        else:
-            color = "green"
-        countdown_cells.append(
-            f"<span style='color:{color}'>{t.format_countdown()}</span>"
-        )
-
-    data = {
-        "Boss Name": [t.name for t in timers_sorted],
-        "Interval (min)": [t.interval_minutes for t in timers_sorted],
-        "Last Spawn Time": [t.last_time.strftime("%Y-%m-%d %I:%M %p") for t in timers_sorted],
-        "Date for Next Spawn": [t.next_time.strftime("%Y-%m-%d (%a)") for t in timers_sorted],
-        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
-        "Count Down": countdown_cells,
-    }
-
-    df = pd.DataFrame(data)
-    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 # ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
@@ -284,6 +185,147 @@ def get_next_weekly_spawn(day_time: str):
 
     return spawn_dt
 
+# ------------------- Next Boss Banner -------------------
+def next_boss_banner(timers_list):
+    # Update field timers
+    for t in timers_list:
+        t.update_next()
+
+    # Soonest field boss
+    field_next = min(timers_list, key=lambda x: x.countdown())
+    field_cd = field_next.countdown()
+
+    # Soonest weekly boss
+    now = datetime.now(tz=MANILA)
+    weekly_best_name = None
+    weekly_best_time = None
+    weekly_best_cd = None
+
+    for boss, times in weekly_boss_data:
+        for sched in times:
+            spawn_dt = get_next_weekly_spawn(sched)
+            cd = spawn_dt - now
+            if weekly_best_cd is None or cd < weekly_best_cd:
+                weekly_best_cd = cd
+                weekly_best_name = boss
+                weekly_best_time = spawn_dt
+
+    # Decide which spawns next (field vs weekly)
+    chosen_name = field_next.name
+    chosen_time = field_next.next_time
+    chosen_cd = field_cd
+    from_weekly = False
+
+    if weekly_best_cd is not None and weekly_best_cd < field_cd:
+        from_weekly = True
+        chosen_name = weekly_best_name
+        chosen_time = weekly_best_time
+        chosen_cd = weekly_best_cd
+
+    remaining = chosen_cd.total_seconds()
+
+    # Color logic for countdown
+    if remaining <= 60:
+        cd_color = "red"
+    elif remaining <= 300:
+        cd_color = "orange"
+    else:
+        cd_color = "limegreen"
+
+    time_only = chosen_time.strftime("%I:%M %p")
+    cd_str = format_timedelta(chosen_cd) if from_weekly else field_next.format_countdown()
+
+    st.markdown(
+        f"""
+        <style>
+        .banner-container {{
+            display: flex;
+            justify-content: center;
+            margin: 20px 0 5px 0;
+        }}
+        .boss-banner {{
+            background: linear-gradient(90deg, #0f172a, #1d4ed8, #16a34a);
+            padding: 14px 28px;
+            border-radius: 999px;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.75);
+            color: #f9fafb;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }}
+        .boss-banner-title {{
+            font-size: 28px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: 0.03em;
+        }}
+        .boss-banner-row {{
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 18px;
+        }}
+        .banner-chip {{
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.7);
+        }}
+        </style>
+
+        <div class="banner-container">
+            <div class="boss-banner">
+                <h2 class="boss-banner-title">
+                    Next Boss: <strong>{chosen_name}</strong>
+                </h2>
+                <div class="boss-banner-row">
+                    <span class="banner-chip">
+                        🕒 <strong>{time_only}</strong>
+                    </span>
+                    <span class="banner-chip" style="color:{cd_color}; border-color:{cd_color};">
+                        ⏳ <strong>{cd_str}</strong>
+                    </span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ------------------- Auto-Sorted Table -------------------
+def display_boss_table_sorted(timers_list):
+    for t in timers_list:
+        t.update_next()
+
+    timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
+
+    # Build colored countdown values cleanly
+    countdown_cells = []
+    for t in timers_sorted:
+        secs = t.countdown().total_seconds()
+        if secs <= 60:
+            color = "red"
+        elif secs <= 300:
+            color = "orange"
+        else:
+            color = "green"
+        countdown_cells.append(
+            f"<span style='color:{color}'>{t.format_countdown()}</span>"
+        )
+
+    data = {
+        "Boss Name": [t.name for t in timers_sorted],
+        "Interval (min)": [t.interval_minutes for t in timers_sorted],
+        "Last Spawn Time": [t.last_time.strftime("%Y-%m-%d %I:%M %p") for t in timers_sorted],
+        "Date for Next Spawn": [t.next_time.strftime("%Y-%m-%d (%a)") for t in timers_sorted],
+        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
+        "Count Down": countdown_cells,
+    }
+
+    df = pd.DataFrame(data)
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
 def display_weekly_boss_table():
     """Display sorted weekly bosses by nearest spawn time (with countdown)."""
     upcoming = []
@@ -308,6 +350,9 @@ def display_weekly_boss_table():
 
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+# ---- Show the combined (field + weekly) next boss banner ----
+next_boss_banner(timers)
 
 # ------------------- Tabs -------------------
 tabs = ["World Boss Spawn"]
