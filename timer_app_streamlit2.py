@@ -141,20 +141,30 @@ def next_boss_banner(timers_list):
     elif remaining <= 300:
         cd_color = "orange"
     else:
-        cd_color = "green"
+        cd_color = "limegreen"
+
+    # Time only (no date)
+    time_only = next_timer.next_time.strftime("%I:%M %p")
 
     st.markdown(
         f"""
-        <div style="text-align:center; padding: 15px 0;">
-            <h2 style="margin-bottom:0;">Next Boss: <strong>{next_timer.name}</strong></h2>
-            <div style="font-size:20px; margin-top:5px;">
-                🕒 <strong>{next_timer.next_time.strftime('%I:%M %p')}</strong> 
-                &nbsp; • &nbsp;
-                ⏳ <strong style="color:{cd_color};">{next_timer.format_countdown()}</strong>
+        <div class="banner-container">
+            <div class="boss-banner">
+                <h2 class="boss-banner-title">
+                    Next Boss: <strong>{next_timer.name}</strong>
+                </h2>
+                <div class="boss-banner-row">
+                    <span class="banner-chip">
+                        🕒 <strong>{time_only}</strong>
+                    </span>
+                    <span class="banner-chip" style="color:{cd_color}; border-color:{cd_color};">
+                        ⏳ <strong>{next_timer.format_countdown()}</strong>
+                    </span>
+                </div>
             </div>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 next_boss_banner(timers)
@@ -334,6 +344,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
