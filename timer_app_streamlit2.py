@@ -56,6 +56,7 @@ def load_boss_data():
     else:
         data = default_boss_data.copy()
 
+    # Auto-add Supore if missing
     if not any(boss[0] == "Supore" for boss in data):
         data.append(("Supore", 3720, "2025-09-20 07:15 AM"))
         with open(DATA_FILE, "w") as f:
@@ -154,6 +155,7 @@ def display_boss_table_sorted(timers_list):
 
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
+    # colored countdown
     countdown_cells = []
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
@@ -186,19 +188,66 @@ def display_boss_table_sorted(timers_list):
     </style>
     """
 
-    st.write(table_style + df.to_html(escape=False, index=False), unsafe_allow_html=True)
+    html = df.to_html(escape=False, index=False)
+    st.write(table_style + html, unsafe_allow_html=True)
 
-# ------------------- Weekly Boss Table -------------------
+# ------------------- Password Gate -------------------
+if "auth" not in st.session_state:
+    st.session_state.auth = False
+
+if not st.session_state.auth:
+    username = st.text_input("Enter your name:")
+    password = st.text_input("🔑 Enter password to edit timers:", type="password")
+    if password == ADMIN_PASSWORD and username.strip():
+        st.session_state.auth = True
+        st.session_state.username = username.strip()
+        st.success(f"✅ Access granted for {st.session_state.username}")
+
+# ------------------- Weekly Boss Data -------------------
+weekly_boss_data = [
+    ("Clemantis", ["Monday 11:30", "Thursday 19:00"]),
+    ("Saphirus", ["Sunday 17:00", "Tuesday 11:30"]),
+    ("Neutro", ["Tuesday 19:00", "Thursday 11:30"]),
+    ("Thymele", ["Monday 19:00", "Wednesday 11:30"]),
+    ("Milavy", ["Saturday 15:00"]),
+    ("Ringor", ["Saturday 17:00"]),
+    ("Roderick", ["Friday 19:00"]),
+    ("Auraq", ["Sunday 21:00", "Wednesday 21:00"]),
+    ("Chaiflock", ["Saturday 22:00"]),
+]
+
+def get_next_weekly_spawn(day_time: str):
+    """Convert 'Monday 11:30' to next datetime in Manila timezone."""
+    now = datetime.now(tz=MANILA)
+    day, time_str = day_time.split()
+    target_time = datetime.strptime(time_str, "%H:%M").time()
+
+    weekday_map = {
+        "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
+        "Friday": 4, "Saturday": 5, "Sunday": 6
+    }
+    target_weekday = weekday_map[day]
+
+    days_ahead = (target_weekday - now.weekday()) % 7
+    spawn_date = (now + timedelta(days=days_ahead)).date()
+    spawn_dt = datetime.combine(spawn_date, target_time).replace(tzinfo=MANILA)
+
+    if spawn_dt <= now:
+        spawn_dt += timedelta(days=7)
+
+    return spawn_dt
+
 def display_weekly_boss_table():
+    """Display sorted weekly bosses by nearest spawn time (with countdown)."""
     upcoming = []
     now = datetime.now(tz=MANILA)
-
     for boss, times in weekly_boss_data:
         for t in times:
             spawn_dt = get_next_weekly_spawn(t)
             countdown = spawn_dt - now
             upcoming.append((boss, t, spawn_dt, countdown))
 
+    # Sort by soonest spawn
     upcoming_sorted = sorted(upcoming, key=lambda x: x[2])
 
     countdown_cells = []
@@ -231,7 +280,8 @@ def display_weekly_boss_table():
     </style>
     """
 
-    st.write(table_style + df.to_html(escape=False, index=False), unsafe_allow_html=True)
+    html = df.to_html(escape=False, index=False)
+    st.write(table_style + html, unsafe_allow_html=True)
 
 # ------------------- Tabs -------------------
 tabs = ["World Boss Spawn"]
@@ -240,18 +290,19 @@ if st.session_state.auth:
     tabs.append("Edit History")
 tab_selection = st.tabs(tabs)
 
-# Tab 1
+# Tab 1: World Boss Spawn
 with tab_selection[0]:
     st.subheader("World Boss Spawn Table")
-    col1, col2 = st.columns([2, 1])
+
+    col1, col2 = st.columns([2, 1])  # left = bigger
     with col1:
         display_boss_table_sorted(timers)
     with col2:
         st.subheader("📅 Weekly Bosses (Auto-Sorted)")
         display_weekly_boss_table()
 
-# Tab 2
-if st.session_state.auth:
+# Tab 2: Manage & Edit Timers
+if st.session_state.auth and len(tab_selection) > 1:
     with tab_selection[1]:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
         for i, timer in enumerate(timers):
@@ -265,7 +316,7 @@ if st.session_state.auth:
                     f"{timer.name} Last Time",
                     value=timer.last_time.time(),
                     key=f"{timer.name}_last_time",
-                    step=60
+                    step=60  # <-- 1-minute increments
                 )
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
@@ -275,19 +326,21 @@ if st.session_state.auth:
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
 
+                    # Save to JSON
                     save_boss_data([
                         (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
                         for t in st.session_state.timers
                     ])
 
+                    # Log edit
                     log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
 
                     st.success(
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
 
-# Tab 3 - History
-if st.session_state.auth:
+# Tab 3: Edit History
+if st.session_state.auth and len(tab_selection) > 2:
     with tab_selection[2]:
         st.subheader("Edit History")
         if HISTORY_FILE.exists():
