@@ -135,7 +135,7 @@ def next_boss_banner(timers_list):
     next_timer = min(timers_list, key=lambda x: x.countdown())
     remaining = next_timer.countdown().total_seconds()
 
-    # Color logic
+    # Color logic for countdown
     if remaining <= 60:
         cd_color = "red"
     elif remaining <= 300:
@@ -143,11 +143,47 @@ def next_boss_banner(timers_list):
     else:
         cd_color = "limegreen"
 
-    # Time only (no date)
     time_only = next_timer.next_time.strftime("%I:%M %p")
 
     st.markdown(
         f"""
+        <style>
+        .banner-container {{
+            display: flex;
+            justify-content: center;
+            margin: 20px 0 5px 0;
+        }}
+        .boss-banner {{
+            background: linear-gradient(90deg, #0f172a, #1d4ed8, #16a34a);
+            padding: 14px 28px;
+            border-radius: 999px;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.75);
+            color: #f9fafb;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }}
+        .boss-banner-title {{
+            font-size: 28px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: 0.03em;
+        }}
+        .boss-banner-row {{
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 18px;
+        }}
+        .banner-chip {{
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.7);
+        }}
+        </style>
+
         <div class="banner-container">
             <div class="boss-banner">
                 <h2 class="boss-banner-title">
@@ -344,6 +380,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
