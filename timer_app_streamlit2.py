@@ -221,58 +221,22 @@ def display_boss_table_sorted(timers_list):
         elif secs <= 300:
             color = "orange"
         else:
-            color = "limegreen"
+            color = "green"
         countdown_cells.append(
-            f"<span style='color:{color}; font-weight:600;'>{t.format_countdown()}</span>"
+            f"<span style='color:{color}'>{t.format_countdown()}</span>"
         )
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
-        "Last Spawn Time": [t.last_time.strftime('%Y-%m-%d %I:%M %p') for t in timers_sorted],
-        "Date for Next Spawn": [t.next_time.strftime('%Y-%m-%d (%a)') for t in timers_sorted],
-        "Next Spawn Time": [t.next_time.strftime('%I:%M %p') for t in timers_sorted],
+        "Last Spawn Time": [t.last_time.strftime("%Y-%m-%d %I:%M %p") for t in timers_sorted],
+        "Date for Next Spawn": [t.next_time.strftime("%Y-%m-%d (%a)") for t in timers_sorted],
+        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
         "Count Down": countdown_cells,
     }
 
     df = pd.DataFrame(data)
-
-    table_style = """
-    <style>
-    .boss-card {
-        background: rgba(15, 23, 42, 0.98);
-        border-radius: 18px;
-        padding: 12px 16px 16px 16px;
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
-        overflow-x: auto;
-    }
-    .boss-card table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-    }
-    .boss-card th {
-        text-align: center;
-        font-weight: 700;
-        padding: 8px 6px;
-        background: #020617;
-        color: #e5e7eb;
-        border-bottom: 1px solid #1e293b;
-    }
-    .boss-card td {
-        text-align: center;
-        padding: 6px 6px;
-        color: #e5e7eb;
-        background: #020617;
-    }
-    .boss-card tr:nth-child(even) td {
-        background: #02081f;
-    }
-    </style>
-    """
-
-    html = df.to_html(escape=False, index=False)
-    st.markdown(table_style + f'<div class="boss-card">{html}</div>', unsafe_allow_html=True)
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 # ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
@@ -416,17 +380,3 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
