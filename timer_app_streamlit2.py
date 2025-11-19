@@ -343,7 +343,7 @@ def display_weekly_boss_table():
         "Schedule": [b[1] for b in upcoming_sorted],
         "Next Spawn": [b[2].strftime("%Y-%m-%d %a %I:%M %p") for b in upcoming_sorted],
         "Countdown": [
-            f"<span style='color:{'red' if b[3].total_seconds() <= 60 else 'orange' if b[3].total_seconds() <= 300 else 'green'}'>{str(b[3]).split('.')[0]}</span>"
+            f"<span style='color:{'red' if b[3].total_seconds() <= 60 else 'orange' if b[3].total_seconds() <= 300 else 'green'}'>{format_timedelta(b[3])}</span>"
             for b in upcoming_sorted
         ],
     }
