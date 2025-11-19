@@ -155,7 +155,7 @@ def display_boss_table_sorted(timers_list):
 
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
-    # colored countdown
+    # Build colored countdown values cleanly
     countdown_cells = []
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
@@ -179,17 +179,7 @@ def display_boss_table_sorted(timers_list):
     }
 
     df = pd.DataFrame(data)
-
-    table_style = """
-    <style>
-    table { margin-left: auto; margin-right: auto; }
-    th { text-align: center !important; font-weight: 700; }
-    td { text-align: center; }
-    </style>
-    """
-
-    html = df.to_html(escape=False, index=False)
-    st.markdown(table_style + html, unsafe_allow_html=True)
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 # ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
@@ -240,48 +230,27 @@ def get_next_weekly_spawn(day_time: str):
 def display_weekly_boss_table():
     """Display sorted weekly bosses by nearest spawn time (with countdown)."""
     upcoming = []
-    now = datetime.now(tz=MANILA)
     for boss, times in weekly_boss_data:
-        for t in times:
+        for t in times:  # multiple spawns handled here
             spawn_dt = get_next_weekly_spawn(t)
-            countdown = spawn_dt - now
+            countdown = spawn_dt - datetime.now(tz=MANILA)
             upcoming.append((boss, t, spawn_dt, countdown))
 
     # Sort by soonest spawn
     upcoming_sorted = sorted(upcoming, key=lambda x: x[2])
 
-    countdown_cells = []
-    for _, _, _, cd in upcoming_sorted:
-        secs = cd.total_seconds()
-        if secs <= 60:
-            color = "red"
-        elif secs <= 300:
-            color = "orange"
-        else:
-            color = "green"
-        countdown_cells.append(
-            f"<span style='color:{color}'>{str(cd).split('.')[0]}</span>"
-        )
-
     data = {
         "Boss": [b[0] for b in upcoming_sorted],
         "Schedule": [b[1] for b in upcoming_sorted],
         "Next Spawn": [b[2].strftime("%Y-%m-%d %a %I:%M %p") for b in upcoming_sorted],
-        "Countdown": countdown_cells,
+        "Countdown": [
+            f"<span style='color:{'red' if b[3].total_seconds() <= 60 else 'orange' if b[3].total_seconds() <= 300 else 'green'}'>{str(b[3]).split('.')[0]}</span>"
+            for b in upcoming_sorted
+        ],
     }
 
     df = pd.DataFrame(data)
-
-    table_style = """
-    <style>
-    table { margin-left: auto; margin-right: auto; }
-    th { text-align: center !important; font-weight: 700; }
-    td { text-align: center; }
-    </style>
-    """
-
-    html = df.to_html(escape=False, index=False)
-    st.write(table_style + html, unsafe_allow_html=True)
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 # ------------------- Tabs -------------------
 tabs = ["World Boss Spawn"]
@@ -294,6 +263,7 @@ tab_selection = st.tabs(tabs)
 with tab_selection[0]:
     st.subheader("World Boss Spawn Table")
 
+    # Side-by-side layout
     col1, col2 = st.columns([2, 1])  # left = bigger
     with col1:
         display_boss_table_sorted(timers)
@@ -302,7 +272,7 @@ with tab_selection[0]:
         display_weekly_boss_table()
 
 # Tab 2: Manage & Edit Timers
-if st.session_state.auth and len(tab_selection) > 1:
+if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
         for i, timer in enumerate(timers):
@@ -340,7 +310,7 @@ if st.session_state.auth and len(tab_selection) > 1:
                     )
 
 # Tab 3: Edit History
-if st.session_state.auth and len(tab_selection) > 2:
+if st.session_state.auth:
     with tab_selection[2]:
         st.subheader("Edit History")
         if HISTORY_FILE.exists():
@@ -353,4 +323,3 @@ if st.session_state.auth and len(tab_selection) > 2:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
