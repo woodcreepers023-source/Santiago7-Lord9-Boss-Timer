@@ -320,7 +320,7 @@ def display_boss_table_sorted(timers_list):
         "Last Spawn Time": [t.last_time.strftime("%Y-%m-%d %I:%M %p") for t in timers_sorted],
         "Date for Next Spawn": [t.next_time.strftime("%Y-%m-%d (%a)") for t in timers_sorted],
         "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
-        "Count Down": countdown_cells,
+        "Countdown": countdown_cells,
     }
 
     df = pd.DataFrame(data)
@@ -429,3 +429,4 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
