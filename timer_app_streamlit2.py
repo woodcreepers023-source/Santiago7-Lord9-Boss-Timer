@@ -158,8 +158,6 @@ def next_boss_banner(timers_list):
         unsafe_allow_html=True
     )
 
-next_boss_banner(timers)
-
 # ------------------- Auto-Sorted Table -------------------
 def display_boss_table_sorted(timers_list):
     for t in timers_list:
@@ -335,6 +333,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
