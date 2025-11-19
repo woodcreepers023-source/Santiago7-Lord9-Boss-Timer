@@ -135,73 +135,26 @@ def next_boss_banner(timers_list):
     next_timer = min(timers_list, key=lambda x: x.countdown())
     remaining = next_timer.countdown().total_seconds()
 
-    # Color logic for countdown
+    # Color logic
     if remaining <= 60:
         cd_color = "red"
     elif remaining <= 300:
         cd_color = "orange"
     else:
-        cd_color = "limegreen"
-
-    # Time only (no date)
-    time_only = next_timer.next_time.strftime("%I:%M %p")
+        cd_color = "green"
 
     st.markdown(
         f"""
-        <style>
-        .banner-container {{
-            display: flex;
-            justify-content: center;
-            margin: 20px 0 5px 0;
-        }}
-        .boss-banner {{
-            background: linear-gradient(90deg, #0f172a, #1d4ed8, #16a34a);
-            padding: 14px 28px;
-            border-radius: 999px;
-            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.75);
-            color: #f9fafb;
-            display: inline-flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-        }}
-        .boss-banner-title {{
-            font-size: 28px;
-            font-weight: 800;
-            margin: 0;
-            letter-spacing: 0.03em;
-        }}
-        .boss-banner-row {{
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            font-size: 18px;
-        }}
-        .banner-chip {{
-            padding: 4px 12px;
-            border-radius: 999px;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.7);
-        }}
-        </style>
-
-        <div class="banner-container">
-            <div class="boss-banner">
-                <h2 class="boss-banner-title">
-                    Next Boss: <strong>{next_timer.name}</strong>
-                </h2>
-                <div class="boss-banner-row">
-                    <span class="banner-chip">
-                        🕒 <strong>{time_only}</strong>
-                    </span>
-                    <span class="banner-chip" style="color:{cd_color}; border-color:{cd_color};">
-                        ⏳ <strong>{next_timer.format_countdown()}</strong>
-                    </span>
-                </div>
+        <div style="text-align:center; padding: 15px 0;">
+            <h2 style="margin-bottom:0;">Next Boss: <strong>{next_timer.name}</strong></h2>
+            <div style="font-size:20px; margin-top:5px;">
+                🕒 <strong>{next_timer.next_time.strftime('%I:%M %p')}</strong> 
+                &nbsp; • &nbsp;
+                ⏳ <strong style="color:{cd_color};">{next_timer.format_countdown()}</strong>
             </div>
         </div>
         """,
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
 
 next_boss_banner(timers)
@@ -222,9 +175,9 @@ def display_boss_table_sorted(timers_list):
         elif secs <= 300:
             color = "orange"
         else:
-            color = "limegreen"
+            color = "green"
         countdown_cells.append(
-            f"<span style='color:{color}; font-weight:600;'>{t.format_countdown()}</span>"
+            f"<span style='color:{color}'>{t.format_countdown()}</span>"
         )
 
     data = {
@@ -237,42 +190,7 @@ def display_boss_table_sorted(timers_list):
     }
 
     df = pd.DataFrame(data)
-
-    table_style = """
-    <style>
-    .boss-card {
-        background: rgba(15, 23, 42, 0.98);
-        border-radius: 18px;
-        padding: 12px 16px 16px 16px;
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
-    }
-    .boss-card table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-    }
-    .boss-card th {
-        text-align: center;
-        font-weight: 700;
-        padding: 8px 6px;
-        background: #020617;
-        color: #e5e7eb;
-        border-bottom: 1px solid #1e293b;
-    }
-    .boss-card td {
-        text-align: center;
-        padding: 6px 6px;
-        color: #e5e7eb;
-        background: #020617;
-    }
-    .boss-card tr:nth-child(even) td {
-        background: #02081f;
-    }
-    </style>
-    """
-
-    html = df.to_html(escape=False, index=False)
-    st.markdown(table_style + f'<div class="boss-card">{html}</div>', unsafe_allow_html=True)
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 # ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
@@ -332,63 +250,18 @@ def display_weekly_boss_table():
     # Sort by soonest spawn
     upcoming_sorted = sorted(upcoming, key=lambda x: x[2])
 
-    countdown_cells = []
-    for _, _, _, cd in upcoming_sorted:
-        secs = cd.total_seconds()
-        if secs <= 60:
-            color = "red"
-        elif secs <= 300:
-            color = "orange"
-        else:
-            color = "limegreen"
-        countdown_cells.append(
-            f"<span style='color:{color}; font-weight:600;'>{str(cd).split('.')[0]}</span>"
-        )
-
     data = {
         "Boss": [b[0] for b in upcoming_sorted],
         "Schedule": [b[1] for b in upcoming_sorted],
         "Next Spawn": [b[2].strftime("%Y-%m-%d %a %I:%M %p") for b in upcoming_sorted],
-        "Countdown": countdown_cells,
+        "Countdown": [
+            f"<span style='color:{'red' if b[3].total_seconds() <= 60 else 'orange' if b[3].total_seconds() <= 300 else 'green'}'>{str(b[3]).split('.')[0]}</span>"
+            for b in upcoming_sorted
+        ],
     }
 
     df = pd.DataFrame(data)
-
-    table_style = """
-    <style>
-    .weekly-card {
-        background: rgba(15, 23, 42, 0.98);
-        border-radius: 18px;
-        padding: 12px 16px 16px 16px;
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
-    }
-    .weekly-card table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-    }
-    .weekly-card th {
-        text-align: center;
-        font-weight: 700;
-        padding: 8px 6px;
-        background: #020617;
-        color: #e5e7eb;
-        border-bottom: 1px solid #1e293b;
-    }
-    .weekly-card td {
-        text-align: center;
-        padding: 6px 6px;
-        color: #e5e7eb;
-        background: #020617;
-    }
-    .weekly-card tr:nth-child(even) td {
-        background: #02081f;
-    }
-    </style>
-    """
-
-    html = df.to_html(escape=False, index=False)
-    st.markdown(table_style + f'<div class="weekly-card">{html}</div>', unsafe_allow_html=True)
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 # ------------------- Tabs -------------------
 tabs = ["World Boss Spawn"]
@@ -461,3 +334,13 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
+
+
+
+
+
+
+
+
+
