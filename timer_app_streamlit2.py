@@ -318,15 +318,15 @@ def display_boss_table_sorted(timers_list):
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
 
-        # ⭐ NEW FORMAT APPLIED HERE
+        # Last spawn with your chosen format
         "Last Spawn Time": [
             t.last_time.strftime("%b %d, %Y | %I:%M %p")
             for t in timers_sorted
         ],
 
-        # ⭐ NEW FORMAT ALSO APPLIED HERE
+        # ⬇⬇⬇ UPDATED — date only, NO TIME
         "Date for Next Spawn": [
-            t.next_time.strftime("%b %d, %Y | %I:%M %p")
+            t.next_time.strftime("%b %d, %Y (%a)")
             for t in timers_sorted
         ],
 
@@ -444,6 +444,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
