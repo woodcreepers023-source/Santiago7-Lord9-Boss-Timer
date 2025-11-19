@@ -343,7 +343,7 @@ def display_weekly_boss_table():
     upcoming_sorted = sorted(upcoming, key=lambda x: x[1])
 
     data = {
-        "Boss": [row[0] for row in upcoming_sorted],
+        "Boss Name": [row[0] for row in upcoming_sorted],
         "Day": [row[1].strftime("%A") for row in upcoming_sorted],
         "Time": [row[1].strftime("%I:%M %p") for row in upcoming_sorted],
         "Countdown": [
@@ -429,4 +429,5 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
