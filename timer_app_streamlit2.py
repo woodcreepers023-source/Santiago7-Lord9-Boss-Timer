@@ -300,7 +300,7 @@ def display_boss_table_sorted(timers_list):
 
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
-    # Build colored countdown values cleanly
+    # Build colored countdown values
     countdown_cells = []
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
@@ -317,7 +317,12 @@ def display_boss_table_sorted(timers_list):
     data = {
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
-        "Last Spawn Time": [t.last_time.strftime("%Y-%m-%d %I:%M %p") for t in timers_sorted],
+
+        # UPDATED FORMAT HERE ↓↓↓↓↓↓↓↓↓↓
+        "Last Spawn Time": [
+            t.last_time.strftime("%Y-%m-%d | %I:%M %p") for t in timers_sorted
+        ],
+
         "Date for Next Spawn": [t.next_time.strftime("%Y-%m-%d (%a)") for t in timers_sorted],
         "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
         "Countdown": countdown_cells,
@@ -429,6 +434,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
