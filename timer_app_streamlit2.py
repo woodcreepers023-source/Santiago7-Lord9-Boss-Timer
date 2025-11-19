@@ -152,17 +152,32 @@ next_boss_banner(timers)
 def display_boss_table_sorted(timers_list):
     for t in timers_list:
         t.update_next()
+
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
+
+    # Build colored countdown values cleanly
+    countdown_cells = []
+    for t in timers_sorted:
+        secs = t.countdown().total_seconds()
+        if secs <= 60:
+            color = "red"
+        elif secs <= 300:
+            color = "orange"
+        else:
+            color = "green"
+        countdown_cells.append(
+            f"<span style='color:{color}'>{t.format_countdown()}</span>"
+        )
+
     data = {
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
-        "Last Time": [t.last_time.strftime("%Y-%m-%d %I:%M %p") for t in timers_sorted],
-        "Countdown": [
-            f"<span style='color:{'red' if t.countdown().total_seconds() <= 60 else 'orange' if t.countdown().total_seconds() <= 300 else 'green'}'>{t.format_countdown()}</span>"
-            for t in timers_sorted
-        ],
-        "Next Spawn": [t.next_time.strftime("%Y-%m-%d %I:%M %p") for t in timers_sorted],
+        "Last Spawn Time": [t.last_time.strftime("%Y-%m-%d %I:%M %p") for t in timers_sorted],
+        "Date for Next Spawn": [t.next_time.strftime("%Y-%m-%d (%a)") for t in timers_sorted],
+        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
+        "Count Down": countdown_cells,
     }
+
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
@@ -308,6 +323,3 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
-
