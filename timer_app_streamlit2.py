@@ -268,7 +268,7 @@ with tab_selection[0]:
     with col1:
         display_boss_table_sorted(timers)
     with col2:
-        st.subheader("Field Boss Spawn Table")
+        st.subheader("📅 Fixed Time Weekly Boss Spawn Table")
         display_weekly_boss_table()
 
 # Tab 2: Manage & Edit Timers
@@ -323,6 +323,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
