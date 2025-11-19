@@ -131,32 +131,22 @@ timers = st.session_state.timers
 def next_boss_banner(timers_list):
     for t in timers_list:
         t.update_next()
-
     next_timer = min(timers_list, key=lambda x: x.countdown())
     remaining = next_timer.countdown().total_seconds()
-
-    # Color logic
     if remaining <= 60:
         cd_color = "red"
     elif remaining <= 300:
         cd_color = "orange"
     else:
         cd_color = "green"
-
     st.markdown(
-        f"""
-        <div style="text-align:center; padding: 20px 0;">
-            <h1 style="margin-bottom:10px; font-size:42px;">Next Boss: <strong>{next_timer.name}</strong></h1>
-
-            <div style="font-size:26px; margin-top:10px;">
-                🕒 <strong>{next_timer.next_time.strftime('%Y-%m-%d %I:%M %p')}</strong>
-                &nbsp; • &nbsp;
-                ⏳ <strong style="color:{cd_color};">{next_timer.format_countdown()}</strong>
-            </div>
-        </div>
-        """,
+        f"<h2 style='text-align:center'>Next Boss: {next_timer.name} | "
+        f"Spawn: {next_timer.next_time.strftime('%Y-%m-%d %I:%M %p')} | "
+        f"<span style='color:{cd_color}'>{next_timer.format_countdown()}</span></h2>",
         unsafe_allow_html=True
     )
+
+next_boss_banner(timers)
 
 # ------------------- Auto-Sorted Table -------------------
 def display_boss_table_sorted(timers_list):
