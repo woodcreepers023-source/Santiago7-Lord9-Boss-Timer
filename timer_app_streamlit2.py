@@ -155,7 +155,6 @@ def display_boss_table_sorted(timers_list):
 
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
-    # Build colored countdown values cleanly
     countdown_cells = []
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
@@ -179,7 +178,36 @@ def display_boss_table_sorted(timers_list):
     }
 
     df = pd.DataFrame(data)
-    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+    table_style = """
+    <style>
+    table {
+        margin-left: auto;
+        margin-right: auto;
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th {
+        text-align: center !important;
+        font-weight: 700;
+        padding: 10px;
+        background-color: #f2f2f2;
+    }
+    td {
+        text-align: center;
+        padding: 8px;
+    }
+    tr:nth-child(even) {
+        background-color: #fafafa;
+    }
+    tr:hover {
+        background-color: #f1f1f1;
+    }
+    </style>
+    """
+
+    html = df.to_html(escape=False, index=False)
+    st.markdown(table_style + html, unsafe_allow_html=True)
 
 # ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
@@ -323,3 +351,4 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
