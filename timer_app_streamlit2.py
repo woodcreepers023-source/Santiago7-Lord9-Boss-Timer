@@ -325,7 +325,7 @@ def display_boss_table_sorted(timers_list):
         ],
 
         # ⬇⬇⬇ UPDATED — date only, NO TIME
-        "Date for Next Spawn": [
+        "Next Spawn Date": [
             t.next_time.strftime("%b %d, %Y (%a)")
             for t in timers_sorted
         ],
@@ -444,6 +444,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
