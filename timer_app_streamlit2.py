@@ -131,18 +131,29 @@ timers = st.session_state.timers
 def next_boss_banner(timers_list):
     for t in timers_list:
         t.update_next()
+
     next_timer = min(timers_list, key=lambda x: x.countdown())
     remaining = next_timer.countdown().total_seconds()
+
+    # Color logic
     if remaining <= 60:
         cd_color = "red"
     elif remaining <= 300:
         cd_color = "orange"
     else:
         cd_color = "green"
+
     st.markdown(
-        f"<h2 style='text-align:center'>Next Boss: {next_timer.name} | "
-        f"Spawn: {next_timer.next_time.strftime('%Y-%m-%d %I:%M %p')} | "
-        f"<span style='color:{cd_color}'>{next_timer.format_countdown()}</span></h2>",
+        f"""
+        <div style="text-align:center; padding: 15px 0;">
+            <h2 style="margin-bottom:0;">Next Boss: <strong>{next_timer.name}</strong></h2>
+            <div style="font-size:20px; margin-top:5px;">
+                🕒 <strong>{next_timer.next_time.strftime('%Y-%m-%d %I:%M %p')}</strong> 
+                &nbsp; • &nbsp;
+                ⏳ <strong style="color:{cd_color};">{next_timer.format_countdown()}</strong>
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True
     )
 
@@ -323,6 +334,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
