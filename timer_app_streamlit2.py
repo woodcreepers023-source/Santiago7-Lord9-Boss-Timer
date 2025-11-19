@@ -189,7 +189,7 @@ def display_boss_table_sorted(timers_list):
     """
 
     html = df.to_html(escape=False, index=False)
-    st.write(table_style + html, unsafe_allow_html=True)
+    st.markdown(table_style + html, unsafe_allow_html=True)
 
 # ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
@@ -353,3 +353,4 @@ if st.session_state.auth and len(tab_selection) > 2:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
