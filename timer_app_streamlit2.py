@@ -145,10 +145,11 @@ def next_boss_banner(timers_list):
 
     st.markdown(
         f"""
-        <div style="text-align:center; padding: 15px 0;">
-            <h2 style="margin-bottom:0;">Next Boss: <strong>{next_timer.name}</strong></h2>
-            <div style="font-size:20px; margin-top:5px;">
-                🕒 <strong>{next_timer.next_time.strftime('%Y-%m-%d %I:%M %p')}</strong> 
+        <div style="text-align:center; padding: 20px 0;">
+            <h1 style="margin-bottom:10px; font-size:42px;">Next Boss: <strong>{next_timer.name}</strong></h1>
+
+            <div style="font-size:26px; margin-top:10px;">
+                🕒 <strong>{next_timer.next_time.strftime('%Y-%m-%d %I:%M %p')}</strong>
                 &nbsp; • &nbsp;
                 ⏳ <strong style="color:{cd_color};">{next_timer.format_countdown()}</strong>
             </div>
@@ -334,6 +335,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
