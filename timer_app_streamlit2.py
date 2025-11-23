@@ -56,7 +56,6 @@ def load_boss_data():
     else:
         data = default_boss_data.copy()
 
-    # Auto-add Supore if missing
     if not any(boss[0] == "Supore" for boss in data):
         data.append(("Supore", 3720, "2025-09-20 07:15 AM"))
         with open(DATA_FILE, "w") as f:
@@ -165,7 +164,6 @@ weekly_boss_data = [
 ]
 
 def get_next_weekly_spawn(day_time: str):
-    """Convert 'Monday 11:30' to next datetime in Manila timezone."""
     now = datetime.now(tz=MANILA)
     day, time_str = day_time.split()
     target_time = datetime.strptime(time_str, "%H:%M").time()
@@ -187,15 +185,12 @@ def get_next_weekly_spawn(day_time: str):
 
 # ------------------- Next Boss Banner -------------------
 def next_boss_banner(timers_list):
-    # Update field timers
     for t in timers_list:
         t.update_next()
 
-    # Soonest field boss
     field_next = min(timers_list, key=lambda x: x.countdown())
     field_cd = field_next.countdown()
 
-    # Soonest weekly boss
     now = datetime.now(tz=MANILA)
     weekly_best_name = None
     weekly_best_time = None
@@ -210,7 +205,6 @@ def next_boss_banner(timers_list):
                 weekly_best_name = boss
                 weekly_best_time = spawn_dt
 
-    # Decide which spawns next (field vs weekly)
     chosen_name = field_next.name
     chosen_time = field_next.next_time
     chosen_cd = field_cd
@@ -224,7 +218,6 @@ def next_boss_banner(timers_list):
 
     remaining = chosen_cd.total_seconds()
 
-    # Color logic for countdown
     if remaining <= 60:
         cd_color = "red"
     elif remaining <= 300:
@@ -300,7 +293,6 @@ def display_boss_table_sorted(timers_list):
 
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
-    # Build colored countdown values
     countdown_cells = []
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
@@ -310,39 +302,22 @@ def display_boss_table_sorted(timers_list):
             color = "orange"
         else:
             color = "green"
-        countdown_cells.append(
-            f"<span style='color:{color}'>{t.format_countdown()}</span>"
-        )
+        countdown_cells.append(f"<span style='color:{color}'>{t.format_countdown()}</span>")
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
-
-        "Last Spawn": [
-            t.last_time.strftime("%b %d, %Y | %I:%M %p")
-            for t in timers_sorted
-        ],
-
-        "Next Spawn Date": [
-            t.next_time.strftime("%b %d, %Y (%a)")
-            for t in timers_sorted
-        ],
-
-        "Next Spawn Time": [
-            t.next_time.strftime("%I:%M %p")
-            for t in timers_sorted
-        ],
-
+        "Last Spawn": [t.last_time.strftime("%b %d, %Y | %I:%M %p") for t in timers_sorted],
+        "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
+        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
         "Countdown": countdown_cells,
     }
 
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-# ------------------- Weekly Table: Boss | Day | Time | Countdown -------------------
+# ------------------- Weekly Table -------------------
 def display_weekly_boss_table():
-    """Display sorted weekly bosses by nearest spawn time with columns:
-       Boss, Day, Time (12h), Countdown."""
     upcoming = []
     now = datetime.now(tz=MANILA)
 
@@ -367,7 +342,7 @@ def display_weekly_boss_table():
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-# ---- Show the combined (field + weekly) next boss banner ----
+# ---- Show banner ----
 next_boss_banner(timers)
 
 # ------------------- Tabs -------------------
@@ -377,35 +352,52 @@ if st.session_state.auth:
     tabs.append("Edit History")
 tab_selection = st.tabs(tabs)
 
-# Tab 1: World Boss Spawn
+# ------------------- Tab 1: World Boss Spawn (FIXED ALIGNMENT) -------------------
 with tab_selection[0]:
+
+    # CSS FLEX LAYOUT FOR ALIGNMENT
+    st.markdown("""
+        <style>
+        .equal-columns {
+            display: flex;
+            gap: 40px;
+            align-items: flex-start;
+            width: 100%;
+        }
+        .col-left {
+            flex: 2;
+        }
+        .col-right {
+            flex: 1;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="equal-columns">', unsafe_allow_html=True)
+
+    # LEFT TABLE
+    st.markdown('<div class="col-left">', unsafe_allow_html=True)
     st.subheader("🗡️ Field Boss Spawn Table")
+    display_boss_table_sorted(timers)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Side-by-side layout (field + weekly)
-    col1, col2 = st.columns([2, 1])  # left = bigger
-    with col1:
-        display_boss_table_sorted(timers)
-    with col2:
-        st.subheader("📅 Fixed Time Field Boss Spawn Table")
-        display_weekly_boss_table()
+    # RIGHT TABLE
+    st.markdown('<div class="col-right">', unsafe_allow_html=True)
+    st.subheader("📅 Fixed Time Field Boss Spawn Table")
+    display_weekly_boss_table()
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# Tab 2: Manage & Edit Timers
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ------------------- Tab 2: Manage & Edit Timers -------------------
 if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
-                new_date = st.date_input(
-                    f"{timer.name} Last Date",
-                    value=timer.last_time.date(),
-                    key=f"{timer.name}_last_date"
-                )
-                new_time = st.time_input(
-                    f"{timer.name} Last Time",
-                    value=timer.last_time.time(),
-                    key=f"{timer.name}_last_time",
-                    step=60  # <-- 1-minute increments
-                )
+                new_date = st.date_input(f"{timer.name} Last Date", value=timer.last_time.date(), key=f"{timer.name}_last_date")
+                new_time = st.time_input(f"{timer.name} Last Time", value=timer.last_time.time(), key=f"{timer.name}_last_time", step=60)
+
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
                     updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
@@ -414,20 +406,16 @@ if st.session_state.auth:
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
 
-                    # Save to JSON
                     save_boss_data([
                         (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
                         for t in st.session_state.timers
                     ])
 
-                    # Log edit
                     log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
 
-                    st.success(
-                        f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
-                    )
+                    st.success(f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}")
 
-# Tab 3: Edit History
+# ------------------- Tab 3: Edit History -------------------
 if st.session_state.auth:
     with tab_selection[2]:
         st.subheader("Edit History")
@@ -435,8 +423,8 @@ if st.session_state.auth:
             with open(HISTORY_FILE, "r") as f:
                 history = json.load(f)
             if history:
-                df_history = pd.DataFrame(history).sort_values("edited_at", ascending=False)
-                st.dataframe(df_history)
+                df = pd.DataFrame(history).sort_values("edited_at", ascending=False)
+                st.dataframe(df)
             else:
                 st.info("No edits yet.")
         else:
