@@ -135,6 +135,15 @@ st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
 st_autorefresh(interval=1000, key="timer_refresh")
 
+# 🔹 Equal-height CSS for the two tables
+st.markdown("""
+<style>
+.equal-box {
+    min-height: 900px;  /* adjust if you want taller/shorter */
+}
+</style>
+""", unsafe_allow_html=True)
+
 if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
@@ -317,22 +326,18 @@ def display_boss_table_sorted(timers_list):
     data = {
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
-
         "Last Spawn": [
             t.last_time.strftime("%b %d, %Y | %I:%M %p")
             for t in timers_sorted
         ],
-
         "Next Spawn Date": [
             t.next_time.strftime("%b %d, %Y (%a)")
             for t in timers_sorted
         ],
-
         "Next Spawn Time": [
             t.next_time.strftime("%I:%M %p")
             for t in timers_sorted
         ],
-
         "Countdown": countdown_cells,
     }
 
@@ -379,15 +384,21 @@ tab_selection = st.tabs(tabs)
 
 # Tab 1: World Boss Spawn
 with tab_selection[0]:
-    st.subheader("🗡️ Field Boss Spawn Table")
 
-    # Side-by-side layout (field + weekly)
+    # Side-by-side layout (field + weekly) with equal-height boxes
     col1, col2 = st.columns([2, 1])  # left = bigger
+
     with col1:
+        st.markdown('<div class="equal-box">', unsafe_allow_html=True)
+        st.subheader("🗡️ Field Boss Spawn Table")
         display_boss_table_sorted(timers)
+        st.markdown('</div>', unsafe_allow_html=True)
+
     with col2:
+        st.markdown('<div class="equal-box">', unsafe_allow_html=True)
         st.subheader("📅 Fixed Time Field Boss Spawn Table")
         display_weekly_boss_table()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # Tab 2: Manage & Edit Timers
 if st.session_state.auth:
