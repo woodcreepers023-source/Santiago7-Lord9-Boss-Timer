@@ -382,7 +382,7 @@ tab_selection = st.tabs(tabs)
 
 # Tab 1: World Boss Spawn
 with tab_selection[0]:
-    st.subheader("Field Boss Spawn Table")
+    st.subheader("🗡️ Field Boss Spawn Table")
 
     # Side-by-side layout
     col1, col2 = st.columns([2, 1])  # left = bigger
@@ -444,6 +444,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
