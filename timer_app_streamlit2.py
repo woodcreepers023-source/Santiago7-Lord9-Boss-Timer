@@ -318,13 +318,11 @@ def display_boss_table_sorted(timers_list):
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
 
-        # Last spawn with your chosen format
         "Last Spawn": [
             t.last_time.strftime("%b %d, %Y | %I:%M %p")
             for t in timers_sorted
         ],
 
-        # ⬇⬇⬇ UPDATED — date only, NO TIME
         "Next Spawn Date": [
             t.next_time.strftime("%b %d, %Y (%a)")
             for t in timers_sorted
@@ -341,7 +339,7 @@ def display_boss_table_sorted(timers_list):
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-# ------------------- NEW Weekly Table: Boss | Day | Time | Countdown -------------------
+# ------------------- Weekly Table: Boss | Day | Time | Countdown -------------------
 def display_weekly_boss_table():
     """Display sorted weekly bosses by nearest spawn time with columns:
        Boss, Day, Time (12h), Countdown."""
@@ -349,12 +347,11 @@ def display_weekly_boss_table():
     now = datetime.now(tz=MANILA)
 
     for boss, times in weekly_boss_data:
-        for sched in times:  # multiple fixed schedules per boss
+        for sched in times:
             spawn_dt = get_next_weekly_spawn(sched)
             countdown = spawn_dt - now
             upcoming.append((boss, spawn_dt, countdown))
 
-    # Sort by soonest spawn
     upcoming_sorted = sorted(upcoming, key=lambda x: x[1])
 
     data = {
@@ -384,7 +381,7 @@ tab_selection = st.tabs(tabs)
 with tab_selection[0]:
     st.subheader("🗡️ Field Boss Spawn Table")
 
-    # Side-by-side layout
+    # Side-by-side layout (field + weekly)
     col1, col2 = st.columns([2, 1])  # left = bigger
     with col1:
         display_boss_table_sorted(timers)
@@ -444,16 +441,3 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
-
-
-
-
-
-
-
-
-
-
-
