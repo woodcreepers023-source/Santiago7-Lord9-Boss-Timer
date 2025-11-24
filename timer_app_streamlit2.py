@@ -523,11 +523,35 @@ if st.session_state.auth:
 if st.session_state.auth:
     with tab_selection[2]:
         st.subheader("Edit History")
-        history = _safe_load_json(HISTORY_FILE, [])
-        if history:
-            df_history = pd.DataFrame(history).sort_values(
-                "edited_at", ascending=False
-            )
-            st.dataframe(df_history)
+
+        if HISTORY_FILE.exists():
+            try:
+                with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                    history = json.load(f)
+            except Exception:
+                history = []
+
+            if history:
+                df_history = pd.DataFrame(history)
+
+                # Convert edited_at string -> real datetime for correct sorting
+                df_history["edited_at_dt"] = pd.to_datetime(
+                    df_history["edited_at"],
+                    format="%Y-%m-%d %I:%M %p",
+                    errors="coerce"
+                )
+
+                # Sort newest → oldest
+                df_history = (
+                    df_history
+                    .sort_values("edited_at_dt", ascending=False)
+                    .drop(columns=["edited_at_dt"])
+                    .reset_index(drop=True)
+                )
+
+                st.dataframe(df_history, use_container_width=True)
+            else:
+                st.info("No edits yet.")
         else:
-            st.info("No edits yet.")
+            st.info("No edit history yet.")
+
