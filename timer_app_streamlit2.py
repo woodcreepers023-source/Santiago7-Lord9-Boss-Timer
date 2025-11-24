@@ -370,7 +370,7 @@ def display_boss_table_sorted(timers_list):
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
 
-        # 👉 Updated to numeric date + 24-hour time
+        # numeric date + 24-hour time
         "Last Spawn": [
             t.last_time.strftime("%Y/%m/%d - %H:%M") for t in timers_sorted
         ],
@@ -455,38 +455,6 @@ if st.session_state.auth:
                     step=60,  # 1-minute increments
                 )
 
-                # Quick button to set last spawn = now (optional QoL)
-                if st.button(f"Set {timer.name} last spawn to NOW", key=f"now_{timer.name}"):
-                    old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
-                    updated_last_time = datetime.now(tz=MANILA)
-                    updated_next_time = updated_last_time + timedelta(
-                        seconds=timer.interval
-                    )
-
-                    st.session_state.timers[i].last_time = updated_last_time
-                    st.session_state.timers[i].next_time = updated_next_time
-
-                    save_boss_data(
-                        [
-                            (
-                                t.name,
-                                t.interval_minutes,
-                                t.last_time.strftime("%Y-%m-%d %I:%M %p"),
-                            )
-                            for t in st.session_state.timers
-                        ]
-                    )
-
-                    log_edit(
-                        timer.name,
-                        old_time_str,
-                        updated_last_time.strftime("%Y-%m-%d %I:%M %p"),
-                    )
-
-                    st.success(
-                        f"✅ {timer.name} set to now! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
-                    )
-
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
                     updated_last_time = datetime.combine(new_date, new_time).replace(
@@ -541,13 +509,12 @@ if st.session_state.auth:
                 df_history["edited_at_dt"] = pd.to_datetime(
                     df_history["edited_at"],
                     format="%Y-%m-%d %I:%M %p",
-                    errors="coerce"
+                    errors="coerce",
                 )
 
                 # Sort newest → oldest
                 df_history = (
-                    df_history
-                    .sort_values("edited_at_dt", ascending=False)
+                    df_history.sort_values("edited_at_dt", ascending=False)
                     .drop(columns=["edited_at_dt"])
                     .reset_index(drop=True)
                 )
@@ -557,5 +524,3 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
