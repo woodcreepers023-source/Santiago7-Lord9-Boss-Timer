@@ -443,14 +443,20 @@ if st.session_state.auth:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
+
+                # ➜ Always default to TODAY + CURRENT TIME when editing
+                now_manila = datetime.now(tz=MANILA)
+                today = now_manila.date()
+                current_time = now_manila.time().replace(second=0, microsecond=0)
+
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
-                    value=timer.last_time.date(),
+                    value=today,                     # <-- today (not old saved date)
                     key=f"{timer.name}_last_date",
                 )
                 new_time = st.time_input(
                     f"{timer.name} Last Time",
-                    value=timer.last_time.time(),
+                    value=current_time,              # <-- latest time (now)
                     key=f"{timer.name}_last_time",
                     step=60,  # 1-minute increments
                 )
@@ -490,6 +496,7 @@ if st.session_state.auth:
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
 
+
 # Tab 3: Edit History
 if st.session_state.auth:
     with tab_selection[2]:
@@ -524,3 +531,4 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
