@@ -444,25 +444,27 @@ if st.session_state.auth:
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
 
-                # ➜ Always default to TODAY + CURRENT TIME when editing
-                now_manila = datetime.now(tz=MANILA)
-                today = now_manila.date()
-                current_time = now_manila.time().replace(second=0, microsecond=0)
+                # Date should always default to TODAY
+                today = datetime.now(tz=MANILA).date()
+
+                # Time should remain the STORED LAST SPAWN TIME
+                stored_time = timer.last_time.time()
 
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
-                    value=today,                     # <-- today (not old saved date)
+                    value=today,                     # <-- TODAY
                     key=f"{timer.name}_last_date",
                 )
                 new_time = st.time_input(
                     f"{timer.name} Last Time",
-                    value=current_time,              # <-- latest time (now)
+                    value=stored_time,               # <-- STORED TIME
                     key=f"{timer.name}_last_time",
-                    step=60,  # 1-minute increments
+                    step=60,
                 )
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
+
                     updated_last_time = datetime.combine(new_date, new_time).replace(
                         tzinfo=MANILA
                     )
@@ -531,4 +533,5 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
