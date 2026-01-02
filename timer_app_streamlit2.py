@@ -79,9 +79,7 @@ def load_boss_data():
         if data and isinstance(data[0], dict):
             normalized = []
             for d in data:
-                normalized.append(
-                    (d["name"], d["interval_minutes"], d["last_time_str"])
-                )
+                normalized.append((d["name"], d["interval_minutes"], d["last_time_str"]))
             data = normalized
             save_boss_data(data)
 
@@ -127,18 +125,24 @@ class TimerEntry:
     def __init__(self, name, interval_minutes, last_time_str):
         self.name = name
         self.interval_minutes = interval_minutes
-        self.interval = interval_minutes * 60
-        parsed_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(
+        self.interval = interval_minutes * 60  # seconds
+
+        self.last_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(
             tzinfo=MANILA
         )
-        self.last_time = parsed_time
         self.next_time = self.last_time + timedelta(seconds=self.interval)
 
     def update_next(self):
+        """
+        Advance ONLY next_time; keep last_time as the saved/recorded boss time.
+        """
         now = datetime.now(tz=MANILA)
-        while self.next_time < now:
-            self.last_time = self.next_time
-            self.next_time = self.last_time + timedelta(seconds=self.interval)
+        if self.next_time >= now:
+            return
+
+        elapsed = (now - self.last_time).total_seconds()
+        cycles = int(elapsed // self.interval) + 1
+        self.next_time = self.last_time + timedelta(seconds=cycles * self.interval)
 
     def countdown(self):
         return self.next_time - datetime.now(tz=MANILA)
@@ -363,22 +367,13 @@ def display_boss_table_sorted(timers_list):
             color = "orange"
         else:
             color = "green"
-        countdown_cells.append(
-            f"<span style='color:{color}'>{t.format_countdown()}</span>"
-        )
+        countdown_cells.append(f"<span style='color:{color}'>{t.format_countdown()}</span>")
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
-
-        # numeric date + 24-hour time
-        "Last Spawn": [
-            t.last_time.strftime("%Y/%m/%d - %H:%M") for t in timers_sorted
-        ],
-
-        "Next Spawn Date": [
-            t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted
-        ],
+        "Last Spawn": [t.last_time.strftime("%Y/%m/%d - %H:%M") for t in timers_sorted],
+        "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
         "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
         "Countdown": countdown_cells,
     }
@@ -445,20 +440,18 @@ if st.session_state.auth:
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
 
-                # Date should always default to TODAY
-                today = datetime.now(tz=MANILA).date()
-
-                # Time should remain the STORED LAST SPAWN TIME
+                # ✅ default to STORED last date/time (NOT today)
+                stored_date = timer.last_time.date()
                 stored_time = timer.last_time.time()
 
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
-                    value=today,                     # <-- TODAY
+                    value=stored_date,
                     key=f"{timer.name}_last_date",
                 )
                 new_time = st.time_input(
                     f"{timer.name} Last Time",
-                    value=stored_time,               # <-- STORED TIME
+                    value=stored_time,
                     key=f"{timer.name}_last_time",
                     step=60,
                 )
@@ -469,9 +462,7 @@ if st.session_state.auth:
                     updated_last_time = datetime.combine(new_date, new_time).replace(
                         tzinfo=MANILA
                     )
-                    updated_next_time = updated_last_time + timedelta(
-                        seconds=timer.interval
-                    )
+                    updated_next_time = updated_last_time + timedelta(seconds=timer.interval)
 
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
@@ -498,7 +489,6 @@ if st.session_state.auth:
                     st.success(
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
-
 
 # Tab 3: Edit History
 if st.session_state.auth:
@@ -534,6 +524,3 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
-
