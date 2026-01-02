@@ -73,7 +73,6 @@ def load_boss_data():
         data = default_boss_data.copy()
         save_boss_data(data)
     else:
-        # Normalize if saved as list of dicts
         if data and isinstance(data[0], dict):
             normalized = []
             for d in data:
@@ -81,7 +80,6 @@ def load_boss_data():
             data = normalized
             save_boss_data(data)
 
-    # Ensure Supore always exists
     if not any(boss[0] == "Supore" for boss in data):
         data.append(("Supore", 3720, "2025-09-20 07:15 AM"))
         save_boss_data(data)
@@ -122,7 +120,7 @@ class TimerEntry:
     def __init__(self, name, interval_minutes, last_time_str):
         self.name = name
         self.interval_minutes = interval_minutes
-        self.interval = interval_minutes * 60  # seconds
+        self.interval = interval_minutes * 60
 
         self.last_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(
             tzinfo=MANILA
@@ -131,8 +129,9 @@ class TimerEntry:
 
     def update_next(self):
         """
-        Advance ONLY next_time; keep last_time as the saved/recorded boss time.
-        This prevents "Last Spawn" and "Last Date" from drifting to today.
+        IMPORTANT FIX:
+        Do NOT mutate last_time. Only advance next_time.
+        This keeps "Last Spawn" / "Last Date" as the stored boss date.
         """
         now = datetime.now(tz=MANILA)
         if self.next_time >= now:
@@ -180,15 +179,8 @@ st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
 st_autorefresh(interval=1000, key="timer_refresh")
 
-
-def refresh_timers_from_disk():
-    # Rebuild timers from saved JSON
-    st.session_state.timers = build_timers()
-
-
 if "timers" not in st.session_state:
-    refresh_timers_from_disk()
-
+    st.session_state.timers = build_timers()
 timers = st.session_state.timers
 
 # ------------------- Password Gate -------------------
@@ -233,6 +225,7 @@ def get_next_weekly_spawn(day_time: str):
         "Sunday": 6,
     }
     target_weekday = weekday_map[day]
+
     days_ahead = (target_weekday - now.weekday()) % 7
     spawn_date = (now + timedelta(days=days_ahead)).date()
     spawn_dt = datetime.combine(spawn_date, target_time).replace(tzinfo=MANILA)
@@ -378,7 +371,6 @@ def display_boss_table_sorted(timers_list):
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 
-# ------------------- Weekly Table -------------------
 def display_weekly_boss_table():
     upcoming = []
     now = datetime.now(tz=MANILA)
@@ -405,7 +397,7 @@ def display_weekly_boss_table():
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 
-# ---- Show next boss banner ----
+# ---- Show banner ----
 next_boss_banner(timers)
 
 # ------------------- Tabs -------------------
@@ -425,7 +417,7 @@ with tab_selection[0]:
         st.subheader("📅 Fixed Time Field Boss Spawn Table")
         display_weekly_boss_table()
 
-# Tab 2: Manage & Edit Timers
+# Tab 2 (FIXED: Last Date shows STORED date, not today)
 if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
@@ -433,30 +425,20 @@ if st.session_state.auth:
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
 
-                # ------------------- FIX: "Last Date" must show STORED boss date -------------------
-                # Streamlit widgets keep their value via session_state keys.
-                # So we initialize the widget keys ONCE using the stored date/time.
                 stored_date = timer.last_time.date()
                 stored_time = timer.last_time.time()
 
                 date_key = f"{timer.name}_last_date"
                 time_key = f"{timer.name}_last_time"
 
+                # ✅ Initialize widget state once so it uses STORED date/time
                 if date_key not in st.session_state:
                     st.session_state[date_key] = stored_date
                 if time_key not in st.session_state:
                     st.session_state[time_key] = stored_time
 
-                new_date = st.date_input(
-                    f"{timer.name} Last Date",
-                    key=date_key,
-                )
-
-                new_time = st.time_input(
-                    f"{timer.name} Last Time",
-                    key=time_key,
-                    step=60,
-                )
+                new_date = st.date_input(f"{timer.name} Last Date", key=date_key)
+                new_time = st.time_input(f"{timer.name} Last Time", key=time_key, step=60)
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
@@ -467,11 +449,10 @@ if st.session_state.auth:
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
 
-                    # Keep widget state in sync after save
+                    # keep widget state synced
                     st.session_state[date_key] = new_date
                     st.session_state[time_key] = new_time
 
-                    # Save to JSON
                     save_boss_data(
                         [
                             (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
@@ -479,17 +460,13 @@ if st.session_state.auth:
                         ]
                     )
 
-                    log_edit(
-                        timer.name,
-                        old_time_str,
-                        updated_last_time.strftime("%Y-%m-%d %I:%M %p"),
-                    )
+                    log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
 
                     st.success(
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
 
-# Tab 3: Edit History
+# Tab 3
 if st.session_state.auth:
     with tab_selection[2]:
         st.subheader("Edit History")
@@ -503,7 +480,6 @@ if st.session_state.auth:
 
             if history:
                 df_history = pd.DataFrame(history)
-
                 df_history["edited_at_dt"] = pd.to_datetime(
                     df_history["edited_at"],
                     format="%Y-%m-%d %I:%M %p",
