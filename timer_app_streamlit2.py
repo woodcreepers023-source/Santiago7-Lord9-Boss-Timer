@@ -424,25 +424,68 @@ with tab_selection[0]:
         st.subheader("📅 Fixed Time Field Boss Spawn Table")
         display_weekly_boss_table()
 
-# Tab 2: Manage & Edit Timers (FIXED: Last Date uses stored date, not today)
+
+# ------------------- Tab 2: Manage & Edit Timers (FIXED AUTO-UPDATE LAST DATE/TIME) -------------------
 if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
-        for i, timer in enumerate(timers):
-            with st.expander(f"Edit {timer.name}", expanded=False):
 
-                # ✅ Default to the STORED last date/time (NOT current date)
-                stored_date = timer.last_time.date()
-                stored_time = timer.last_time.time().replace(second=0, microsecond=0)
+        def sync_inputs_if_not_edited(timer: TimerEntry):
+            """
+            Keeps the Date/Time inputs synced with timer.last_time as it auto-advances.
+            BUT will NOT overwrite if the user has manually changed the inputs.
+            """
+            date_key = f"{timer.name}_last_date"
+            time_key = f"{timer.name}_last_time"
+            sync_key = f"{timer.name}_last_sync"  # marker
+
+            stored_date = timer.last_time.date()
+            stored_time = timer.last_time.time().replace(second=0, microsecond=0)
+
+            # What we last pushed into the widgets
+            last_synced = st.session_state.get(sync_key)
+
+            # First time initialization
+            if (
+                last_synced is None
+                or date_key not in st.session_state
+                or time_key not in st.session_state
+            ):
+                st.session_state[date_key] = stored_date
+                st.session_state[time_key] = stored_time
+                st.session_state[sync_key] = (stored_date, stored_time)
+                return
+
+            prev_date, prev_time = last_synced
+
+            # Current widget values (what user sees/edited)
+            user_date = st.session_state.get(date_key)
+            user_time = st.session_state.get(time_key)
+
+            # If user hasn't changed since last sync, it's safe to overwrite
+            user_unchanged = (user_date == prev_date) and (user_time == prev_time)
+
+            if user_unchanged and (stored_date, stored_time) != (prev_date, prev_time):
+                st.session_state[date_key] = stored_date
+                st.session_state[time_key] = stored_time
+
+            # Update marker to newest stored snapshot
+            st.session_state[sync_key] = (stored_date, stored_time)
+
+        for i, timer in enumerate(timers):
+            # ✅ IMPORTANT: advance timer.last_time/next_time BEFORE showing stored date/time
+            timer.update_next()
+
+            with st.expander(f"Edit {timer.name}", expanded=False):
+                # ✅ Sync widget state so the date/time inputs auto-update on reruns
+                sync_inputs_if_not_edited(timer)
 
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
-                    value=stored_date,
                     key=f"{timer.name}_last_date",
                 )
                 new_time = st.time_input(
                     f"{timer.name} Last Time",
-                    value=stored_time,
                     key=f"{timer.name}_last_time",
                     step=60,
                 )
@@ -450,7 +493,9 @@ if st.session_state.auth:
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
 
-                    updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
+                    updated_last_time = datetime.combine(new_date, new_time).replace(
+                        tzinfo=MANILA
+                    )
                     updated_next_time = updated_last_time + timedelta(seconds=timer.interval)
 
                     st.session_state.timers[i].last_time = updated_last_time
@@ -458,7 +503,11 @@ if st.session_state.auth:
 
                     save_boss_data(
                         [
-                            (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
+                            (
+                                t.name,
+                                t.interval_minutes,
+                                t.last_time.strftime("%Y-%m-%d %I:%M %p"),
+                            )
                             for t in st.session_state.timers
                         ]
                     )
@@ -469,11 +518,18 @@ if st.session_state.auth:
                         updated_last_time.strftime("%Y-%m-%d %I:%M %p"),
                     )
 
+                    # ✅ After saving, update sync marker so inputs stay aligned
+                    st.session_state[f"{timer.name}_last_sync"] = (
+                        updated_last_time.date(),
+                        updated_last_time.time().replace(second=0, microsecond=0),
+                    )
+
                     st.success(
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
 
-# Tab 3: Edit History
+
+# ------------------- Tab 3: Edit History -------------------
 if st.session_state.auth:
     with tab_selection[2]:
         st.subheader("Edit History")
