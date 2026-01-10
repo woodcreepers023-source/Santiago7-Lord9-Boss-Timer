@@ -7,12 +7,22 @@ import requests
 import json
 from pathlib import Path
 
+# ✅ NEW: cookies (so refresh won't logout)
+from streamlit_cookies_manager import EncryptedCookieManager
+
 # ------------------- Config -------------------
 MANILA = ZoneInfo("Asia/Manila")
 DISCORD_WEBHOOK_URL = "YOUR_DISCORD_WEBHOOK_HERE"  # <-- put your webhook here
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 ADMIN_PASSWORD = "bestgame"
+
+# ✅ IMPORTANT: change this to a long random string (keep it the same forever)
+COOKIE_PASSWORD = "CHANGE_THIS_TO_A_LONG_RANDOM_STRING_32CHARS_MINIMUM"
+
+cookies = EncryptedCookieManager(prefix="lord9boss_", password=COOKIE_PASSWORD)
+if not cookies.ready():
+    st.stop()
 
 
 def send_discord_message(message: str):
@@ -181,24 +191,49 @@ if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
 
-# ------------------- Password Gate (IMPROVED) -------------------
+# ------------------- Password Gate (PERSISTENT VIA COOKIE) -------------------
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
+# Auto-login from cookie (survives refresh)
+if cookies.get("auth") == "1" and cookies.get("username"):
+    st.session_state.auth = True
+    st.session_state.username = cookies.get("username")
+
+# Sidebar: show login status + logout
+with st.sidebar:
+    if st.session_state.get("auth"):
+        st.success(f"Logged in as: {st.session_state.get('username', '')}")
+        if st.button("Logout"):
+            st.session_state.auth = False
+            st.session_state.username = ""
+
+            cookies["auth"] = "0"
+            cookies["username"] = ""
+            cookies.save()
+
+            st.rerun()
+    else:
+        st.info("Not logged in")
+
+# Login UI
 if not st.session_state.auth:
     st.subheader("🔐 Login to Edit Timers")
 
     username = st.text_input("Enter your name:", key="login_username")
     password = st.text_input("🔑 Enter password to edit timers:", type="password", key="login_password")
 
-    colA, colB = st.columns([1, 3])
-    with colA:
-        login_clicked = st.button("Login")
+    login_clicked = st.button("Login")
 
     if login_clicked:
         if password == ADMIN_PASSWORD and username.strip():
             st.session_state.auth = True
             st.session_state.username = username.strip()
+
+            cookies["auth"] = "1"
+            cookies["username"] = st.session_state.username
+            cookies.save()
+
             st.success(f"✅ Access granted for {st.session_state.username}")
             st.rerun()
         else:
@@ -461,7 +496,7 @@ if st.session_state.auth:
                     f"{timer.name} Last Time",
                     value=stored_time,  # <-- STORED TIME
                     key=f"{timer.name}_last_time",
-                    step=timedelta(minutes=1),  # ✅ FIX: use timedelta
+                    step=timedelta(minutes=1),  # ✅ FIX: timedelta instead of int
                 )
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
