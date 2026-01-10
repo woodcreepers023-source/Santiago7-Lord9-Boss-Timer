@@ -131,13 +131,17 @@ class TimerEntry:
         self.interval_minutes = interval_minutes
         self.interval = timedelta(minutes=interval_minutes)
 
-        # Defensive parsing: app won't crash if JSON has a weird string
+        # Track if we had to fix a bad stored time string
+        self._parse_fixed = False
+
+        # Defensive parsing: app won't crash if JSON has a weird string (or None)
         try:
             parsed_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(
                 tzinfo=MANILA
             )
-        except ValueError:
+        except Exception:
             parsed_time = datetime.now(tz=MANILA)
+            self._parse_fixed = True
 
         self.last_time = parsed_time
         self.next_time = self.last_time + self.interval
@@ -182,14 +186,22 @@ def build_timers():
     return [TimerEntry(*data) for data in load_boss_data()]
 
 
-# ------------------- Auto-advance & persist (RECOMMENDED) -------------------
+# ------------------- Auto-advance & persist (PERFECT + CONSISTENT) -------------------
 def advance_and_persist_if_needed(timers_list):
     """
     Keeps timers correct (update_next) AND saves advanced last_time to JSON
     so edit screen always matches what you see.
+
+    Also: if a stored time string was invalid, it gets fixed once and saved.
     """
     changed = False
+
     for t in timers_list:
+        # Persist parse-fixes once (so JSON becomes clean)
+        if getattr(t, "_parse_fixed", False):
+            changed = True
+            t._parse_fixed = False
+
         old_last = t.last_time
         t.update_next()
         if t.last_time != old_last:
@@ -215,7 +227,7 @@ if "timers" not in st.session_state:
 
 timers = st.session_state.timers
 
-# Keep timers accurate and persist rollovers (RECOMMENDED)
+# Keep timers accurate and persist rollovers (PERFECT + CONSISTENT)
 advance_and_persist_if_needed(timers)
 
 
@@ -252,8 +264,10 @@ if st.session_state.get("auth", False):
         st.success("Reloaded timers from boss_timers.json")
         st.rerun()
 
-# Re-read after potential reload
+# Re-read after potential reload (and re-apply auto-advance persist)
 timers = st.session_state.timers
+advance_and_persist_if_needed(timers)
+
 
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
@@ -328,10 +342,8 @@ def next_boss_banner(timers_list):
     chosen_name = field_next.name
     chosen_time = field_next.next_time
     chosen_cd = field_cd
-    from_weekly = False
 
     if weekly_best_cd is not None and weekly_best_cd < field_cd:
-        from_weekly = True
         chosen_name = weekly_best_name
         chosen_time = weekly_best_time
         chosen_cd = weekly_best_cd
