@@ -567,3 +567,10 @@ if st.session_state.auth:
                     df_history.sort_values("edited_at_dt", ascending=False)
                     .drop(columns=["edited_at_dt"])
                     .reset_index(drop=True)
+                )
+
+                st.dataframe(df_history, use_container_width=True)
+            else:
+                st.info("No edits yet.")
+        else:
+            st.info("No edit history yet.")
