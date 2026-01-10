@@ -92,8 +92,8 @@ def load_boss_data():
             data = normalized
             save_boss_data(data)
 
-    # Ensure Supore always exists
-    if not any(boss[0] == "Supore" for boss in data):
+    # Ensure Supore always exists (case/whitespace-safe, prevents duplicates)
+    if not any(str(boss[0]).strip().lower() == "supore" for boss in data):
         data.append(("Supore", 3720, "2025-09-20 07:15 AM"))
         save_boss_data(data)
 
@@ -287,7 +287,11 @@ weekly_boss_data = [
 def get_next_weekly_spawn(day_time: str):
     """Convert 'Monday 11:30' to next datetime in Manila timezone."""
     now = datetime.now(tz=MANILA)
-    day, time_str = day_time.split()
+
+    # Normalize whitespace so typos like "Monday  11:30" won't crash
+    day_time = " ".join(day_time.split())
+    day, time_str = day_time.split(" ", 1)
+
     target_time = datetime.strptime(time_str, "%H:%M").time()
 
     weekday_map = {
