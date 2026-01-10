@@ -506,7 +506,7 @@ if st.session_state.auth:
                 stored_time = timer.last_time.time()
 
                 new_date = st.date_input(
-                    f"{timer.name} Last Date",
+                    f"{timer.name} Last Spawn",
                     value=stored_date,
                     key=f"{timer.name}_last_date",
                 )
@@ -577,3 +577,4 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
