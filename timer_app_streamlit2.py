@@ -60,12 +60,8 @@ def _safe_load_json(path: Path, default):
         with path.open("r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
+        # If file is corrupted or empty, just fall back
         return default
-
-
-def save_boss_data(data):
-    with DATA_FILE.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
 
 
 def load_boss_data():
@@ -75,9 +71,11 @@ def load_boss_data():
     data = _safe_load_json(DATA_FILE, None)
 
     if data is None:
+        # First run: use default data and save it
         data = default_boss_data.copy()
         save_boss_data(data)
     else:
+        # If JSON was saved as list of dicts accidentally, normalize it
         if data and isinstance(data[0], dict):
             normalized = []
             for d in data:
@@ -85,11 +83,17 @@ def load_boss_data():
             data = normalized
             save_boss_data(data)
 
+    # Ensure Supore always exists
     if not any(boss[0] == "Supore" for boss in data):
         data.append(("Supore", 3720, "2025-09-20 07:15 AM"))
         save_boss_data(data)
 
     return data
+
+
+def save_boss_data(data):
+    with DATA_FILE.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
 
 
 def log_edit(boss_name, old_time, new_time):
@@ -109,35 +113,30 @@ def log_edit(boss_name, old_time, new_time):
     with HISTORY_FILE.open("w", encoding="utf-8") as f:
         json.dump(history, f, indent=4, ensure_ascii=False)
 
+    # Send to Discord so guild can see who edited what
     send_discord_message(
         f"🛠 **{boss_name}** time updated by **{edited_by}**\n"
         f"Old: `{old_time}` → New: `{new_time}` (Manila time)"
     )
 
 
-# ------------------- Timer Class (FIXED: doesn't overwrite last_time) -------------------
+# ------------------- Timer Class -------------------
 class TimerEntry:
     def __init__(self, name, interval_minutes, last_time_str):
         self.name = name
         self.interval_minutes = interval_minutes
-        self.interval = timedelta(minutes=interval_minutes)
-
-        self.last_time = datetime.strptime(
-            last_time_str, "%Y-%m-%d %I:%M %p"
-        ).replace(tzinfo=MANILA)
-
-        self.next_time = self.calculate_next_time()
-
-    def calculate_next_time(self):
-        """Calculate next spawn WITHOUT changing last_time"""
-        now = datetime.now(tz=MANILA)
-        next_time = self.last_time + self.interval
-        while next_time < now:
-            next_time += self.interval
-        return next_time
+        self.interval = interval_minutes * 60
+        parsed_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(
+            tzinfo=MANILA
+        )
+        self.last_time = parsed_time
+        self.next_time = self.last_time + timedelta(seconds=self.interval)
 
     def update_next(self):
-        self.next_time = self.calculate_next_time()
+        now = datetime.now(tz=MANILA)
+        while self.next_time < now:
+            self.last_time = self.next_time
+            self.next_time = self.last_time + timedelta(seconds=self.interval)
 
     def countdown(self):
         return self.next_time - datetime.now(tz=MANILA)
@@ -155,6 +154,7 @@ class TimerEntry:
         return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
+# Helper for weekly countdown formatting
 def format_timedelta(td: timedelta) -> str:
     total_seconds = int(td.total_seconds())
     if total_seconds < 0:
@@ -167,6 +167,7 @@ def format_timedelta(td: timedelta) -> str:
     return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
+# ------------------- Build Timers -------------------
 def build_timers():
     return [TimerEntry(*data) for data in load_boss_data()]
 
@@ -180,7 +181,7 @@ if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
 
-# ------------------- Login (NO COOKIES) -------------------
+# ------------------- Password Gate (IMPROVED, NO COOKIES) -------------------
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
@@ -218,6 +219,7 @@ weekly_boss_data = [
 
 
 def get_next_weekly_spawn(day_time: str):
+    """Convert 'Monday 11:30' to next datetime in Manila timezone."""
     now = datetime.now(tz=MANILA)
     day, time_str = day_time.split()
     target_time = datetime.strptime(time_str, "%H:%M").time()
@@ -243,13 +245,17 @@ def get_next_weekly_spawn(day_time: str):
     return spawn_dt
 
 
+# ------------------- Next Boss Banner -------------------
 def next_boss_banner(timers_list):
+    # Update field timers
     for t in timers_list:
         t.update_next()
 
+    # Soonest field boss
     field_next = min(timers_list, key=lambda x: x.countdown())
     field_cd = field_next.countdown()
 
+    # Soonest weekly boss
     now = datetime.now(tz=MANILA)
     weekly_best_name = None
     weekly_best_time = None
@@ -264,6 +270,7 @@ def next_boss_banner(timers_list):
                 weekly_best_name = boss
                 weekly_best_time = spawn_dt
 
+    # Decide which spawns next (field vs weekly)
     chosen_name = field_next.name
     chosen_time = field_next.next_time
     chosen_cd = field_cd
@@ -277,6 +284,7 @@ def next_boss_banner(timers_list):
 
     remaining = chosen_cd.total_seconds()
 
+    # Color logic for countdown
     if remaining <= 60:
         cd_color = "red"
     elif remaining <= 300:
@@ -346,16 +354,23 @@ def next_boss_banner(timers_list):
     )
 
 
+# ------------------- Auto-Sorted Field Boss Table -------------------
 def display_boss_table_sorted(timers_list):
     for t in timers_list:
         t.update_next()
 
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
+    # Build colored countdown values
     countdown_cells = []
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
-        color = "red" if secs <= 60 else "orange" if secs <= 300 else "green"
+        if secs <= 60:
+            color = "red"
+        elif secs <= 300:
+            color = "orange"
+        else:
+            color = "green"
         countdown_cells.append(f"<span style='color:{color}'>{t.format_countdown()}</span>")
 
     data = {
@@ -371,7 +386,10 @@ def display_boss_table_sorted(timers_list):
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 
+# ------------------- Weekly Table: Boss | Day | Time | Countdown -------------------
 def display_weekly_boss_table():
+    """Display sorted weekly bosses by nearest spawn time with columns:
+       Boss, Day, Time (12h), Countdown."""
     upcoming = []
     now = datetime.now(tz=MANILA)
 
@@ -397,7 +415,7 @@ def display_weekly_boss_table():
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 
-# ---- Show banner ----
+# ---- Show the combined (field + weekly) next boss banner ----
 next_boss_banner(timers)
 
 # ------------------- Tabs -------------------
@@ -407,53 +425,53 @@ if st.session_state.auth:
     tabs.append("Edit History")
 tab_selection = st.tabs(tabs)
 
+# Tab 1: World Boss Spawn
 with tab_selection[0]:
     st.subheader("🗡️ Field Boss Spawn Table")
-    col1, col2 = st.columns([2, 1])
+
+    # Side-by-side layout (field + weekly)
+    col1, col2 = st.columns([2, 1])  # left = bigger
     with col1:
         display_boss_table_sorted(timers)
     with col2:
         st.subheader("📅 Fixed Time Field Boss Spawn Table")
         display_weekly_boss_table()
 
-# ------------------- Manage & Edit Timers (SYNCED INPUTS) -------------------
+# Tab 2: Manage & Edit Timers
 if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
-
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
 
-                date_key = f"{timer.name}_last_date"
-                time_key = f"{timer.name}_last_time"
+                # Date should always default to TODAY
+                today = datetime.now(tz=MANILA).date()
 
-                # ✅ initialize ONCE from stored value (so it's synchronized)
-                if date_key not in st.session_state:
-                    st.session_state[date_key] = timer.last_time.date()
-
-                if time_key not in st.session_state:
-                    st.session_state[time_key] = timer.last_time.time().replace(second=0, microsecond=0)
+                # Time should remain the STORED LAST SPAWN TIME
+                stored_time = timer.last_time.time()
 
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
-                    value=st.session_state[date_key],
-                    key=date_key,
+                    value=today,  # <-- TODAY
+                    key=f"{timer.name}_last_date",
                 )
                 new_time = st.time_input(
                     f"{timer.name} Last Time",
-                    value=st.session_state[time_key],
-                    key=time_key,
-                    step=timedelta(minutes=1),
+                    value=stored_time,  # <-- STORED TIME
+                    key=f"{timer.name}_last_time",
+                    step=timedelta(minutes=1),  # ✅ FIX: timedelta instead of int
                 )
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
 
                     updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
+                    updated_next_time = updated_last_time + timedelta(seconds=timer.interval)
 
                     st.session_state.timers[i].last_time = updated_last_time
-                    st.session_state.timers[i].next_time = st.session_state.timers[i].calculate_next_time()
+                    st.session_state.timers[i].next_time = updated_next_time
 
+                    # Save to JSON
                     save_boss_data(
                         [
                             (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
@@ -461,20 +479,19 @@ if st.session_state.auth:
                         ]
                     )
 
+                    # Log edit
                     log_edit(
                         timer.name,
                         old_time_str,
                         updated_last_time.strftime("%Y-%m-%d %I:%M %p"),
                     )
 
-                    # ✅ keep inputs synchronized after save
-                    st.session_state[date_key] = updated_last_time.date()
-                    st.session_state[time_key] = updated_last_time.time().replace(second=0, microsecond=0)
+                    st.success(
+                        f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
+                    )
 
-                    st.success(f"✅ {timer.name} updated! Next auto-calculated.")
-                    st.rerun()
 
-# ------------------- Edit History -------------------
+# Tab 3: Edit History
 if st.session_state.auth:
     with tab_selection[2]:
         st.subheader("Edit History")
@@ -489,12 +506,14 @@ if st.session_state.auth:
             if history:
                 df_history = pd.DataFrame(history)
 
+                # Convert edited_at string -> real datetime for correct sorting
                 df_history["edited_at_dt"] = pd.to_datetime(
                     df_history["edited_at"],
                     format="%Y-%m-%d %I:%M %p",
                     errors="coerce",
                 )
 
+                # Sort newest → oldest
                 df_history = (
                     df_history.sort_values("edited_at_dt", ascending=False)
                     .drop(columns=["edited_at_dt"])
