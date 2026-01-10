@@ -1,7 +1,13 @@
 import streamlit as st
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from streamlit_autorefresh import st_autorefresh
+
+# Optional auto-refresh (avoid crash if library missing)
+try:
+    from streamlit_autorefresh import st_autorefresh
+except Exception:
+    st_autorefresh = None
+
 import pandas as pd
 import requests
 import json
@@ -64,6 +70,11 @@ def _safe_load_json(path: Path, default):
         return default
 
 
+def save_boss_data(data):
+    with DATA_FILE.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+
 def load_boss_data():
     """
     Stored format in JSON: [ [name, interval_minutes, last_time_str], ... ]
@@ -79,9 +90,7 @@ def load_boss_data():
         if data and isinstance(data[0], dict):
             normalized = []
             for d in data:
-                normalized.append(
-                    (d["name"], d["interval_minutes"], d["last_time_str"])
-                )
+                normalized.append((d["name"], d["interval_minutes"], d["last_time_str"]))
             data = normalized
             save_boss_data(data)
 
@@ -91,11 +100,6 @@ def load_boss_data():
         save_boss_data(data)
 
     return data
-
-
-def save_boss_data(data):
-    with DATA_FILE.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
 
 
 def log_edit(boss_name, old_time, new_time):
@@ -122,19 +126,71 @@ def log_edit(boss_name, old_time, new_time):
     )
 
 
+# ------------------- AUTO-FIX: Persist last_time when respawn passes -------------------
+def _parse_last_time(last_time_str: str) -> datetime:
+    return datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
+
+
+def _fmt_last_time(dt: datetime) -> str:
+    return dt.astimezone(MANILA).strftime("%Y-%m-%d %I:%M %p")
+
+
+def auto_rollover_and_save() -> None:
+    """
+    If a boss already respawned (next_time <= now),
+    roll last_time forward to the most recent spawn and SAVE to JSON.
+    """
+    data = load_boss_data()
+    now = datetime.now(tz=MANILA)
+    changed = False
+
+    updated = []
+    for name, interval_minutes, last_time_str in data:
+        try:
+            last_dt = _parse_last_time(last_time_str)
+        except Exception:
+            # if parsing fails, keep it as-is
+            updated.append((name, interval_minutes, last_time_str))
+            continue
+
+        interval_sec = int(interval_minutes) * 60
+        next_dt = last_dt + timedelta(seconds=interval_sec)
+
+        if next_dt <= now:
+            # How many full intervals have passed since last_dt?
+            elapsed_sec = (now - last_dt).total_seconds()
+            k = int(elapsed_sec // interval_sec)  # number of intervals passed
+            new_last = last_dt + timedelta(seconds=k * interval_sec)
+
+            # Safety: never let new_last go into the future
+            if new_last > now:
+                new_last -= timedelta(seconds=interval_sec)
+
+            new_last_str = _fmt_last_time(new_last)
+            if new_last_str != last_time_str:
+                last_time_str = new_last_str
+                changed = True
+
+        updated.append((name, interval_minutes, last_time_str))
+
+    if changed:
+        save_boss_data(updated)
+
+
 # ------------------- Timer Class -------------------
 class TimerEntry:
     def __init__(self, name, interval_minutes, last_time_str):
         self.name = name
         self.interval_minutes = interval_minutes
         self.interval = interval_minutes * 60
-        parsed_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(
-            tzinfo=MANILA
-        )
+        self.last_time_str = last_time_str  # keep original string too
+
+        parsed_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
         self.last_time = parsed_time
         self.next_time = self.last_time + timedelta(seconds=self.interval)
 
     def update_next(self):
+        # Only updates in-memory; JSON persistence handled by auto_rollover_and_save()
         now = datetime.now(tz=MANILA)
         while self.next_time < now:
             self.last_time = self.next_time
@@ -177,11 +233,18 @@ def build_timers():
 # ------------------- Streamlit Setup -------------------
 st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
-st_autorefresh(interval=1000, key="timer_refresh")
 
-if "timers" not in st.session_state:
-    st.session_state.timers = build_timers()
-timers = st.session_state.timers
+if st_autorefresh is not None:
+    st_autorefresh(interval=1000, key="timer_refresh")
+else:
+    st.info("Tip: install streamlit-autorefresh for live countdown: pip install streamlit-autorefresh")
+
+# ✅ AUTO-FIX RUNS HERE (so last_time updates & saves when respawn passes)
+auto_rollover_and_save()
+
+# ✅ Always rebuild timers from JSON so UI reflects updated last_time
+timers = build_timers()
+
 
 # ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
@@ -194,6 +257,7 @@ if not st.session_state.auth:
         st.session_state.auth = True
         st.session_state.username = username.strip()
         st.success(f"✅ Access granted for {st.session_state.username}")
+
 
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
@@ -363,22 +427,13 @@ def display_boss_table_sorted(timers_list):
             color = "orange"
         else:
             color = "green"
-        countdown_cells.append(
-            f"<span style='color:{color}'>{t.format_countdown()}</span>"
-        )
+        countdown_cells.append(f"<span style='color:{color}'>{t.format_countdown()}</span>")
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
-
-        # numeric date + 24-hour time
-        "Last Spawn": [
-            t.last_time.strftime("%Y/%m/%d - %H:%M") for t in timers_sorted
-        ],
-
-        "Next Spawn Date": [
-            t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted
-        ],
+        "Last Spawn": [t.last_time.strftime("%Y/%m/%d - %H:%M") for t in timers_sorted],
+        "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
         "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
         "Countdown": countdown_cells,
     }
@@ -442,23 +497,22 @@ with tab_selection[0]:
 if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
+
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
 
-                # Date should always default to TODAY
-                today = datetime.now(tz=MANILA).date()
-
-                # Time should remain the STORED LAST SPAWN TIME
+                # ✅ SHOW STORED LAST DATE + TIME (so it updates after respawn rollover)
+                stored_date = timer.last_time.date()
                 stored_time = timer.last_time.time()
 
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
-                    value=today,                     # <-- TODAY
+                    value=stored_date,
                     key=f"{timer.name}_last_date",
                 )
                 new_time = st.time_input(
                     f"{timer.name} Last Time",
-                    value=stored_time,               # <-- STORED TIME
+                    value=stored_time,
                     key=f"{timer.name}_last_time",
                     step=60,
                 )
@@ -466,39 +520,28 @@ if st.session_state.auth:
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
 
-                    updated_last_time = datetime.combine(new_date, new_time).replace(
-                        tzinfo=MANILA
-                    )
-                    updated_next_time = updated_last_time + timedelta(
-                        seconds=timer.interval
-                    )
+                    updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
+                    updated_next_time = updated_last_time + timedelta(seconds=timer.interval)
 
-                    st.session_state.timers[i].last_time = updated_last_time
-                    st.session_state.timers[i].next_time = updated_next_time
+                    # Update local timer object (this run)
+                    timer.last_time = updated_last_time
+                    timer.next_time = updated_next_time
 
-                    # Save to JSON
+                    # Save to JSON (persist)
                     save_boss_data(
                         [
-                            (
-                                t.name,
-                                t.interval_minutes,
-                                t.last_time.strftime("%Y-%m-%d %I:%M %p"),
-                            )
-                            for t in st.session_state.timers
+                            (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
+                            for t in timers
                         ]
                     )
 
                     # Log edit
-                    log_edit(
-                        timer.name,
-                        old_time_str,
-                        updated_last_time.strftime("%Y-%m-%d %I:%M %p"),
-                    )
+                    log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
 
                     st.success(
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
-
+                    st.rerun()
 
 # Tab 3: Edit History
 if st.session_state.auth:
@@ -534,6 +577,3 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
-
