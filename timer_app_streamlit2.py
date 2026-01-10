@@ -69,6 +69,12 @@ def save_boss_data(data):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 
+# ✅ Improvement #2: helper for consistent Manila-aware datetime parsing
+def parse_dt(last_time_str: str) -> datetime:
+    dt = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p")
+    return dt.replace(tzinfo=MANILA)
+
+
 def load_boss_data():
     """
     Stored format in JSON: [ [name, interval_minutes, last_time_str], ... ]
@@ -87,8 +93,11 @@ def load_boss_data():
                 name = d.get("name")
                 interval = d.get("interval_minutes")
                 last_str = d.get("last_time_str")
-                if name and interval and last_str:
-                    normalized.append((name, interval, last_str))
+
+                # ✅ Improvement #1: do NOT treat 0 as False; also force int(interval)
+                if name is not None and interval is not None and last_str:
+                    normalized.append((name, int(interval), last_str))
+
             data = normalized
             save_boss_data(data)
 
@@ -128,17 +137,15 @@ def log_edit(boss_name, old_time, new_time):
 class TimerEntry:
     def __init__(self, name, interval_minutes, last_time_str):
         self.name = name
-        self.interval_minutes = interval_minutes
-        self.interval = timedelta(minutes=interval_minutes)
+        self.interval_minutes = int(interval_minutes)
+        self.interval = timedelta(minutes=self.interval_minutes)
 
         # Track if we had to fix a bad stored time string
         self._parse_fixed = False
 
         # Defensive parsing: app won't crash if JSON has a weird string (or None)
         try:
-            parsed_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(
-                tzinfo=MANILA
-            )
+            parsed_time = parse_dt(last_time_str)
         except Exception:
             parsed_time = datetime.now(tz=MANILA)
             self._parse_fixed = True
