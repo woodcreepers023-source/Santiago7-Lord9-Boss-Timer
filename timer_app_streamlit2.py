@@ -451,12 +451,12 @@ if st.session_state.auth:
                 stored_time = timer.last_time.time()
 
                 new_date = st.date_input(
-                    f"{timer.name} Last Date",
+                    f"{timer.name} Last Date Spawn",
                     value=today,  # <-- TODAY
                     key=f"{timer.name}_last_date",
                 )
                 new_time = st.time_input(
-                    f"{timer.name} Last Time",
+                    f"{timer.name} Last Time Spawn",
                     value=stored_time,  # <-- STORED TIME
                     key=f"{timer.name}_last_time",
                     step=timedelta(minutes=1),  # ✅ FIX: timedelta instead of int
@@ -525,3 +525,4 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
