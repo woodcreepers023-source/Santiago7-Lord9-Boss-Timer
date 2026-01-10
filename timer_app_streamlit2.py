@@ -64,6 +64,11 @@ def _safe_load_json(path: Path, default):
         return default
 
 
+def save_boss_data(data):
+    with DATA_FILE.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+
 def load_boss_data():
     """
     Stored format in JSON: [ [name, interval_minutes, last_time_str], ... ]
@@ -79,9 +84,7 @@ def load_boss_data():
         if data and isinstance(data[0], dict):
             normalized = []
             for d in data:
-                normalized.append(
-                    (d["name"], d["interval_minutes"], d["last_time_str"])
-                )
+                normalized.append((d["name"], d["interval_minutes"], d["last_time_str"]))
             data = normalized
             save_boss_data(data)
 
@@ -91,11 +94,6 @@ def load_boss_data():
         save_boss_data(data)
 
     return data
-
-
-def save_boss_data(data):
-    with DATA_FILE.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
 
 
 def log_edit(boss_name, old_time, new_time):
@@ -183,17 +181,29 @@ if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
 
-# ------------------- Password Gate -------------------
+# ------------------- Password Gate (IMPROVED) -------------------
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    username = st.text_input("Enter your name:")
-    password = st.text_input("🔑 Enter password to edit timers:", type="password")
-    if password == ADMIN_PASSWORD and username.strip():
-        st.session_state.auth = True
-        st.session_state.username = username.strip()
-        st.success(f"✅ Access granted for {st.session_state.username}")
+    st.subheader("🔐 Login to Edit Timers")
+
+    username = st.text_input("Enter your name:", key="login_username")
+    password = st.text_input("🔑 Enter password to edit timers:", type="password", key="login_password")
+
+    colA, colB = st.columns([1, 3])
+    with colA:
+        login_clicked = st.button("Login")
+
+    if login_clicked:
+        if password == ADMIN_PASSWORD and username.strip():
+            st.session_state.auth = True
+            st.session_state.username = username.strip()
+            st.success(f"✅ Access granted for {st.session_state.username}")
+            st.rerun()
+        else:
+            st.error("❌ Invalid name or password.")
+
 
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
@@ -363,22 +373,13 @@ def display_boss_table_sorted(timers_list):
             color = "orange"
         else:
             color = "green"
-        countdown_cells.append(
-            f"<span style='color:{color}'>{t.format_countdown()}</span>"
-        )
+        countdown_cells.append(f"<span style='color:{color}'>{t.format_countdown()}</span>")
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
-
-        # numeric date + 24-hour time
-        "Last Spawn": [
-            t.last_time.strftime("%Y/%m/%d - %H:%M") for t in timers_sorted
-        ],
-
-        "Next Spawn Date": [
-            t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted
-        ],
+        "Last Spawn": [t.last_time.strftime("%Y/%m/%d - %H:%M") for t in timers_sorted],
+        "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
         "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
         "Countdown": countdown_cells,
     }
@@ -453,25 +454,21 @@ if st.session_state.auth:
 
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
-                    value=today,                     # <-- TODAY
+                    value=today,  # <-- TODAY
                     key=f"{timer.name}_last_date",
                 )
                 new_time = st.time_input(
                     f"{timer.name} Last Time",
-                    value=stored_time,               # <-- STORED TIME
+                    value=stored_time,  # <-- STORED TIME
                     key=f"{timer.name}_last_time",
-                    step=60,
+                    step=timedelta(minutes=1),  # ✅ FIX: use timedelta
                 )
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
 
-                    updated_last_time = datetime.combine(new_date, new_time).replace(
-                        tzinfo=MANILA
-                    )
-                    updated_next_time = updated_last_time + timedelta(
-                        seconds=timer.interval
-                    )
+                    updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
+                    updated_next_time = updated_last_time + timedelta(seconds=timer.interval)
 
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
@@ -479,11 +476,7 @@ if st.session_state.auth:
                     # Save to JSON
                     save_boss_data(
                         [
-                            (
-                                t.name,
-                                t.interval_minutes,
-                                t.last_time.strftime("%Y-%m-%d %I:%M %p"),
-                            )
+                            (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
                             for t in st.session_state.timers
                         ]
                     )
@@ -498,7 +491,6 @@ if st.session_state.auth:
                     st.success(
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
-
 
 # Tab 3: Edit History
 if st.session_state.auth:
@@ -534,6 +526,3 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
-
