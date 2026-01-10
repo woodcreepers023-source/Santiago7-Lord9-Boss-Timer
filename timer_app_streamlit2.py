@@ -194,7 +194,7 @@ if not st.session_state.auth:
     login_clicked = st.button("Login")
 
     if login_clicked:
-        if password == ADMIN_PASSWORD and username.strip():
+        if password.strip() == ADMIN_PASSWORD and username.strip():
             st.session_state.auth = True
             st.session_state.username = username.strip()
             st.success(f"✅ Access granted for {st.session_state.username}")
@@ -525,4 +525,5 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
