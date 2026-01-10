@@ -7,22 +7,12 @@ import requests
 import json
 from pathlib import Path
 
-# ✅ NEW: cookies (so refresh won't logout)
-from streamlit_cookies_manager import EncryptedCookieManager
-
 # ------------------- Config -------------------
 MANILA = ZoneInfo("Asia/Manila")
 DISCORD_WEBHOOK_URL = "YOUR_DISCORD_WEBHOOK_HERE"  # <-- put your webhook here
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 ADMIN_PASSWORD = "bestgame"
-
-# ✅ IMPORTANT: change this to a long random string (keep it the same forever)
-COOKIE_PASSWORD = "CHANGE_THIS_TO_A_LONG_RANDOM_STRING_32CHARS_MINIMUM"
-
-cookies = EncryptedCookieManager(prefix="lord9boss_", password=COOKIE_PASSWORD)
-if not cookies.ready():
-    st.stop()
 
 
 def send_discord_message(message: str):
@@ -74,11 +64,6 @@ def _safe_load_json(path: Path, default):
         return default
 
 
-def save_boss_data(data):
-    with DATA_FILE.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-
-
 def load_boss_data():
     """
     Stored format in JSON: [ [name, interval_minutes, last_time_str], ... ]
@@ -104,6 +89,11 @@ def load_boss_data():
         save_boss_data(data)
 
     return data
+
+
+def save_boss_data(data):
+    with DATA_FILE.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
 
 
 def log_edit(boss_name, old_time, new_time):
@@ -191,32 +181,10 @@ if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
 
-# ------------------- Password Gate (PERSISTENT VIA COOKIE) -------------------
+# ------------------- Password Gate (IMPROVED, NO COOKIES) -------------------
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
-# Auto-login from cookie (survives refresh)
-if cookies.get("auth") == "1" and cookies.get("username"):
-    st.session_state.auth = True
-    st.session_state.username = cookies.get("username")
-
-# Sidebar: show login status + logout
-with st.sidebar:
-    if st.session_state.get("auth"):
-        st.success(f"Logged in as: {st.session_state.get('username', '')}")
-        if st.button("Logout"):
-            st.session_state.auth = False
-            st.session_state.username = ""
-
-            cookies["auth"] = "0"
-            cookies["username"] = ""
-            cookies.save()
-
-            st.rerun()
-    else:
-        st.info("Not logged in")
-
-# Login UI
 if not st.session_state.auth:
     st.subheader("🔐 Login to Edit Timers")
 
@@ -229,11 +197,6 @@ if not st.session_state.auth:
         if password == ADMIN_PASSWORD and username.strip():
             st.session_state.auth = True
             st.session_state.username = username.strip()
-
-            cookies["auth"] = "1"
-            cookies["username"] = st.session_state.username
-            cookies.save()
-
             st.success(f"✅ Access granted for {st.session_state.username}")
             st.rerun()
         else:
@@ -526,6 +489,7 @@ if st.session_state.auth:
                     st.success(
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
+
 
 # Tab 3: Edit History
 if st.session_state.auth:
