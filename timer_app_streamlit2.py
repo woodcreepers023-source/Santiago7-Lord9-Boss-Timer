@@ -71,11 +71,10 @@ def load_boss_data():
     data = _safe_load_json(DATA_FILE, None)
 
     if data is None:
-        # First run: use default data and save it
         data = default_boss_data.copy()
         save_boss_data(data)
     else:
-        # If JSON was saved as list of dicts accidentally, normalize it
+        # Normalize dict-based format (if it ever happens)
         if data and isinstance(data[0], dict):
             normalized = []
             for d in data:
@@ -113,7 +112,6 @@ def log_edit(boss_name, old_time, new_time):
     with HISTORY_FILE.open("w", encoding="utf-8") as f:
         json.dump(history, f, indent=4, ensure_ascii=False)
 
-    # Send to Discord so guild can see who edited what
     send_discord_message(
         f"🛠 **{boss_name}** time updated by **{edited_by}**\n"
         f"Old: `{old_time}` → New: `{new_time}` (Manila time)"
@@ -126,7 +124,7 @@ class TimerEntry:
         self.name = name
         self.interval_minutes = interval_minutes
 
-        # Cleaner: store interval as timedelta
+        # ✅ Improvement: store as timedelta (cleaner)
         self.interval = timedelta(minutes=interval_minutes)
 
         parsed_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(
@@ -157,7 +155,6 @@ class TimerEntry:
         return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
-# Helper for weekly countdown formatting
 def format_timedelta(td: timedelta) -> str:
     total_seconds = int(td.total_seconds())
     if total_seconds < 0:
@@ -183,6 +180,7 @@ st_autorefresh(interval=1000, key="timer_refresh")
 if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
+
 
 # ------------------- Password Gate (FORM-BASED, ENTER KEY WORKS) -------------------
 if "auth" not in st.session_state:
@@ -210,14 +208,13 @@ if not st.session_state.auth:
                 st.error("❌ Invalid name or password.")
 
 
-# ✅ Admin tools (safe): reload timers if JSON changed / got edited
+# ✅ Improvement: reload button to resync with JSON any time
 if st.session_state.get("auth", False):
     if st.button("🔄 Reload timers from JSON"):
         st.session_state.timers = build_timers()
         st.success("Reloaded timers from boss_timers.json")
         st.rerun()
 
-# Re-read after potential reload
 timers = st.session_state.timers
 
 
@@ -265,6 +262,7 @@ def get_next_weekly_spawn(day_time: str):
 
 # ------------------- Next Boss Banner -------------------
 def next_boss_banner(timers_list):
+    # ✅ Improvement: guard against empty timers list
     if not timers_list:
         st.warning("No timers loaded.")
         return
@@ -457,7 +455,10 @@ if st.session_state.auth:
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
 
+                # Date forced to TODAY (your current preferred behavior)
                 today = datetime.now(tz=MANILA).date()
+
+                # Time comes from stored last spawn
                 stored_time = timer.last_time.time()
 
                 new_date = st.date_input(
