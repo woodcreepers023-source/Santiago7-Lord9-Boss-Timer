@@ -508,8 +508,10 @@ if st.session_state.auth:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
         for i, timer in enumerate(timers):
-            with st.expander(f"Edit {timer.name}", expanded=False):
+            # ✅ FIX: auto-expand the one you just saved so the message is visible on first click
+            expanded_now = (st.session_state.get("last_saved_boss") == timer.name)
 
+            with st.expander(f"Edit {timer.name}", expanded=expanded_now):
                 stored_date = timer.last_time.date()
                 stored_time = timer.last_time.time()
 
@@ -553,10 +555,11 @@ if st.session_state.auth:
                         updated_last_time.strftime("%Y-%m-%d %I:%M %p"),
                     )
 
-                    # ✅ Store message then rerun so it appears in the right spot
+                    # ✅ Store message + remember which boss was saved, then rerun
                     st.session_state[notice_key] = (
                         f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
+                    st.session_state["last_saved_boss"] = timer.name
                     st.rerun()
 
 # Tab 3: Edit History
