@@ -69,7 +69,7 @@ def save_boss_data(data):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 
-# ✅ Improvement #2: helper for consistent Manila-aware datetime parsing
+# ✅ helper for consistent Manila-aware datetime parsing
 def parse_dt(last_time_str: str) -> datetime:
     dt = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p")
     return dt.replace(tzinfo=MANILA)
@@ -94,7 +94,7 @@ def load_boss_data():
                 interval = d.get("interval_minutes")
                 last_str = d.get("last_time_str")
 
-                # ✅ Improvement #1: do NOT treat 0 as False; also force int(interval)
+                # ✅ do NOT treat 0 as False; also force int(interval)
                 if name is not None and interval is not None and last_str:
                     normalized.append((name, int(interval), last_str))
 
@@ -193,7 +193,7 @@ def build_timers():
     return [TimerEntry(*data) for data in load_boss_data()]
 
 
-# ------------------- Auto-advance & persist (PERFECT + CONSISTENT) -------------------
+# ------------------- Auto-advance & persist -------------------
 def advance_and_persist_if_needed(timers_list):
     """
     Keeps timers correct (update_next) AND saves advanced last_time to JSON
@@ -226,19 +226,16 @@ def advance_and_persist_if_needed(timers_list):
 # ------------------- Streamlit Setup -------------------
 st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
-# (Optional perf) If heavy on hosting, change to 2000 or 3000
 st_autorefresh(interval=1000, key="timer_refresh")
 
 if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 
 timers = st.session_state.timers
-
-# Keep timers accurate and persist rollovers (PERFECT + CONSISTENT)
 advance_and_persist_if_needed(timers)
 
 
-# ------------------- Password Gate (FORM-BASED, ENTER KEY WORKS) -------------------
+# ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
@@ -264,14 +261,13 @@ if not st.session_state.auth:
                 st.error("❌ Invalid name or password.")
 
 
-# ✅ Admin tools (safe): reload timers if JSON changed / got edited
+# ✅ Admin tools
 if st.session_state.get("auth", False):
     if st.button("🔄 Reload timers from JSON"):
         st.session_state.timers = build_timers()
         st.success("Reloaded timers from boss_timers.json")
         st.rerun()
 
-# Re-read after potential reload (and re-apply auto-advance persist)
 timers = st.session_state.timers
 advance_and_persist_if_needed(timers)
 
@@ -295,7 +291,6 @@ def get_next_weekly_spawn(day_time: str):
     """Convert 'Monday 11:30' to next datetime in Manila timezone."""
     now = datetime.now(tz=MANILA)
 
-    # Normalize whitespace so typos like "Monday  11:30" won't crash
     day_time = " ".join(day_time.split())
     day, time_str = day_time.split(" ", 1)
 
@@ -328,11 +323,9 @@ def next_boss_banner(timers_list):
         st.warning("No timers loaded.")
         return
 
-    # Ensure next_time is always current
     for t in timers_list:
         t.update_next()
 
-    # SAFER: choose by next_time (not countdown) so a negative countdown won't break the "next boss"
     field_next = min(timers_list, key=lambda x: x.next_time)
     now = datetime.now(tz=MANILA)
     field_cd = field_next.next_time - now
@@ -446,9 +439,7 @@ def display_boss_table_sorted(timers_list):
             color = "orange"
         else:
             color = "green"
-        countdown_cells.append(
-            f"<span style='color:{color}'>{t.format_countdown()}</span>"
-        )
+        countdown_cells.append(f"<span style='color:{color}'>{t.format_countdown()}</span>")
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
@@ -463,7 +454,7 @@ def display_boss_table_sorted(timers_list):
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 
-# ------------------- Weekly Table: Boss | Day | Time | Countdown -------------------
+# ------------------- Weekly Table -------------------
 def display_weekly_boss_table():
     upcoming = []
     now = datetime.now(tz=MANILA)
@@ -516,15 +507,9 @@ if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
-        # ✅ QUICK NOTIFY (shows after rerun)
-        if "save_notice" in st.session_state:
-            st.success(st.session_state["save_notice"])
-            del st.session_state["save_notice"]
-
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
 
-                # IMPORTANT: default to the stored date/time (prevents accidental date change)
                 stored_date = timer.last_time.date()
                 stored_time = timer.last_time.time()
 
@@ -540,12 +525,16 @@ if st.session_state.auth:
                     step=timedelta(minutes=1),
                 )
 
+                # ✅ Show success message HERE (below Last Time, above Save)
+                notice_key = f"save_notice_{timer.name}"
+                if notice_key in st.session_state:
+                    st.success(st.session_state[notice_key])
+                    del st.session_state[notice_key]
+
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
 
-                    updated_last_time = datetime.combine(new_date, new_time).replace(
-                        tzinfo=MANILA
-                    )
+                    updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
                     updated_next_time = updated_last_time + timer.interval
 
                     st.session_state.timers[i].last_time = updated_last_time
@@ -553,11 +542,7 @@ if st.session_state.auth:
 
                     save_boss_data(
                         [
-                            (
-                                t.name,
-                                t.interval_minutes,
-                                t.last_time.strftime("%Y-%m-%d %I:%M %p"),
-                            )
+                            (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
                             for t in st.session_state.timers
                         ]
                     )
@@ -568,8 +553,8 @@ if st.session_state.auth:
                         updated_last_time.strftime("%Y-%m-%d %I:%M %p"),
                     )
 
-                    # ✅ store notice, then rerun (so it appears after rerun)
-                    st.session_state["save_notice"] = (
+                    # ✅ Store message then rerun so it appears in the right spot
+                    st.session_state[notice_key] = (
                         f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
                     st.rerun()
