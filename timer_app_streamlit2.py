@@ -133,6 +133,82 @@ def log_edit(boss_name, old_time, new_time):
     )
 
 
+# ------------------- History Normalizer (adds the | to old rows) -------------------
+def _parse_history_dt(s: str):
+    """Try multiple known formats from old/new versions."""
+    if not s or not isinstance(s, str):
+        return None
+    s = s.strip()
+
+    fmts = [
+        "%m-%d-%Y | %H:%M",   # NEW format for old_time/new_time
+        "%Y-%m-%d %I:%M %p",  # OLD format in history
+        "%Y-%m-%d %H:%M",     # fallback
+        "%m-%d-%Y %H:%M",     # fallback
+    ]
+    for f in fmts:
+        try:
+            return datetime.strptime(s, f).replace(tzinfo=MANILA)
+        except Exception:
+            pass
+    return None
+
+
+def _parse_edited_at(s: str):
+    """edited_at is Month-Day-Year : 12hr format (but support old formats)."""
+    if not s or not isinstance(s, str):
+        return None
+    s = s.strip()
+
+    fmts = [
+        "%m-%d-%Y : %I:%M %p",  # NEW edited_at
+        "%Y-%m-%d %I:%M %p",    # OLD edited_at
+    ]
+    for f in fmts:
+        try:
+            return datetime.strptime(s, f).replace(tzinfo=MANILA)
+        except Exception:
+            pass
+    return None
+
+
+def normalize_history_file():
+    """Rewrite boss_history.json so old records match your new display format."""
+    if not HISTORY_FILE.exists():
+        return
+
+    history = _safe_load_json(HISTORY_FILE, [])
+    if not history:
+        return
+
+    changed = False
+
+    for row in history:
+        if not isinstance(row, dict):
+            continue
+
+        # old_time / new_time -> MM-DD-YYYY | HH:MM (24hr)
+        for k in ["old_time", "new_time"]:
+            dt = _parse_history_dt(row.get(k, ""))
+            if dt is not None:
+                new_val = dt.strftime("%m-%d-%Y | %H:%M")
+                if row.get(k) != new_val:
+                    row[k] = new_val
+                    changed = True
+
+        # edited_at -> MM-DD-YYYY : hh:mm AM/PM (12hr)
+        dt_e = _parse_edited_at(row.get("edited_at", ""))
+        if dt_e is not None:
+            new_val = dt_e.strftime("%m-%d-%Y : %I:%M %p")
+            if row.get("edited_at") != new_val:
+                row["edited_at"] = new_val
+                changed = True
+
+    if changed:
+        with HISTORY_FILE.open("w", encoding="utf-8") as f:
+            json.dump(history, f, indent=4, ensure_ascii=False)
+
+
 # ------------------- Timer Class -------------------
 class TimerEntry:
     def __init__(self, name, interval_minutes, last_time_str):
@@ -508,7 +584,8 @@ if st.session_state.auth:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
         for i, timer in enumerate(timers):
-            # ✅ auto-expand the one you just saved so the message is visible on first click
+            # ✅ DO NOT auto-fold: keep whatever user sets manually.
+            # (We only auto-open the saved one once so the message is visible)
             expanded_now = (st.session_state.get("last_saved_boss") == timer.name)
 
             with st.expander(f"Edit {timer.name}", expanded=expanded_now):
@@ -540,7 +617,7 @@ if st.session_state.auth:
                         # auto-clear after 1 second
                         del st.session_state[notice_key]
                         del st.session_state[notice_ts_key]
-                        # also clear last_saved_boss so expand won't keep forcing open
+                        # stop forcing-open once message expires
                         if st.session_state.get("last_saved_boss") == timer.name:
                             del st.session_state["last_saved_boss"]
 
@@ -553,6 +630,7 @@ if st.session_state.auth:
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
 
+                    # keep boss_timers.json as your original format (AM/PM) so parse_dt still works
                     save_boss_data(
                         [
                             (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
@@ -563,15 +641,17 @@ if st.session_state.auth:
                     log_edit(
                         timer.name,
                         old_time_str,
-                        updated_last_time.strftime("%m-%d-%Y | %H:%M")
+                        updated_last_time.strftime("%m-%d-%Y | %H:%M"),
                     )
 
                     # ✅ Store message + timestamp + remember which boss was saved, then rerun
                     st.session_state[notice_key] = (
-                        f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
+                        f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%m-%d-%Y | %H:%M')}"
                     )
                     st.session_state[notice_ts_key] = datetime.now(tz=MANILA)
                     st.session_state["last_saved_boss"] = timer.name
+
+                    # ✅ IMPORTANT: rerun so message appears immediately in the correct place
                     st.rerun()
 
 # Tab 3: Edit History
@@ -579,16 +659,16 @@ if st.session_state.auth:
     with tab_selection[2]:
         st.subheader("Edit History")
 
+        # ✅ convert old rows so they show with "|" too
+        normalize_history_file()
+
         if HISTORY_FILE.exists():
-            try:
-                with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                    history = json.load(f)
-            except Exception:
-                history = []
+            history = _safe_load_json(HISTORY_FILE, [])
 
             if history:
                 df_history = pd.DataFrame(history)
 
+                # sort newest first
                 df_history["edited_at_dt"] = pd.to_datetime(
                     df_history["edited_at"],
                     format="%m-%d-%Y : %I:%M %p",
@@ -606,8 +686,3 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
-
-
-
