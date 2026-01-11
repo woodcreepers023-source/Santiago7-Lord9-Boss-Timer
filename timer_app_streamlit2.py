@@ -545,7 +545,7 @@ if st.session_state.auth:
                             del st.session_state["last_saved_boss"]
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
-                    old_time_str = timer.last_time.strftime("%Y-%m-%d %H:%M")
+                    old_time_str = timer.last_time.strftime("%m-%d-%Y | %H:%M")
 
                     updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
                     updated_next_time = updated_last_time + timer.interval
@@ -563,7 +563,7 @@ if st.session_state.auth:
                     log_edit(
                         timer.name,
                         old_time_str,
-                        updated_last_time.strftime("%Y-%m-%d %H:%M"),
+                        updated_last_time.strftime("%m-%d-%Y | %H:%M")
                     )
 
                     # ✅ Store message + timestamp + remember which boss was saved, then rerun
@@ -591,7 +591,7 @@ if st.session_state.auth:
 
                 df_history["edited_at_dt"] = pd.to_datetime(
                     df_history["edited_at"],
-                    format="%Y-%m-%d %I:%M %p",
+                    format="%m-%d-%Y : %I:%M %p",
                     errors="coerce",
                 )
 
@@ -606,6 +606,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
