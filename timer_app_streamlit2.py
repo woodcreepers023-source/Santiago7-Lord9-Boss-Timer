@@ -527,11 +527,22 @@ if st.session_state.auth:
                     step=timedelta(minutes=1),
                 )
 
-                # ✅ Show success message HERE (below Last Time, above Save)
+                # ✅ 2-second auto-hide green notification (below Last Time, above Save)
                 notice_key = f"save_notice_{timer.name}"
-                if notice_key in st.session_state:
-                    st.success(st.session_state[notice_key])
-                    del st.session_state[notice_key]
+                notice_ts_key = f"save_notice_ts_{timer.name}"
+
+                if notice_key in st.session_state and notice_ts_key in st.session_state:
+                    age = (datetime.now(tz=MANILA) - st.session_state[notice_ts_key]).total_seconds()
+
+                    if age < 2:
+                        st.success(st.session_state[notice_key])
+                    else:
+                        # auto-clear after 2 seconds
+                        del st.session_state[notice_key]
+                        del st.session_state[notice_ts_key]
+                        # also clear last_saved_boss so expand won't keep forcing open
+                        if st.session_state.get("last_saved_boss") == timer.name:
+                            del st.session_state["last_saved_boss"]
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
@@ -555,10 +566,11 @@ if st.session_state.auth:
                         updated_last_time.strftime("%Y-%m-%d %I:%M %p"),
                     )
 
-                    # ✅ Store message + remember which boss was saved, then rerun
+                    # ✅ Store message + timestamp + remember which boss was saved, then rerun
                     st.session_state[notice_key] = (
                         f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
+                    st.session_state[notice_ts_key] = datetime.now(tz=MANILA)
                     st.session_state["last_saved_boss"] = timer.name
                     st.rerun()
 
