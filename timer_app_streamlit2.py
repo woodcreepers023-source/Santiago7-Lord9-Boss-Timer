@@ -117,7 +117,7 @@ def log_edit(boss_name, old_time, new_time):
         "boss": boss_name,
         "old_time": old_time,
         "new_time": new_time,
-        "edited_at": datetime.now(tz=MANILA).strftime("%Y-%m-%d %I:%M %p"),
+        "edited_at": datetime.now(tz=MANILA).strftime("%m-%d-%Y : %I:%M %p"),
         "edited_by": edited_by,
     }
 
@@ -606,6 +606,7 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
