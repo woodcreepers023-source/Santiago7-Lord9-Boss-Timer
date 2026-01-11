@@ -446,7 +446,9 @@ def display_boss_table_sorted(timers_list):
             color = "orange"
         else:
             color = "green"
-        countdown_cells.append(f"<span style='color:{color}'>{t.format_countdown()}</span>")
+        countdown_cells.append(
+            f"<span style='color:{color}'>{t.format_countdown()}</span>"
+        )
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
@@ -513,6 +515,12 @@ with tab_selection[0]:
 if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
+
+        # ✅ QUICK NOTIFY (shows after rerun)
+        if "save_notice" in st.session_state:
+            st.success(st.session_state["save_notice"])
+            del st.session_state["save_notice"]
+
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
 
@@ -560,8 +568,9 @@ if st.session_state.auth:
                         updated_last_time.strftime("%Y-%m-%d %I:%M %p"),
                     )
 
-                    st.success(
-                        f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
+                    # ✅ store notice, then rerun (so it appears after rerun)
+                    st.session_state["save_notice"] = (
+                        f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
                     st.rerun()
 
