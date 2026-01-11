@@ -502,16 +502,35 @@ with tab_selection[0]:
         st.subheader("📅 Fixed Time Field Boss Spawn Table")
         display_weekly_boss_table()
 
-# Tab 2: Manage & Edit Timers
+# Tab 2: Manage & Edit Timers (UPDATED: 1s toast + no auto-fold)
 if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
         for i, timer in enumerate(timers):
-            # ✅ auto-expand the one you just saved so the message is visible on first click
-            expanded_now = (st.session_state.get("last_saved_boss") == timer.name)
+            notice_key = f"save_notice_{timer.name}"
+            notice_ts_key = f"save_notice_ts_{timer.name}"
 
-            with st.expander(f"Edit {timer.name}", expanded=expanded_now):
+            # ✅ Force-open ONLY for 1 second after saving, then stop forcing.
+            force_open = False
+            if (
+                st.session_state.get("last_saved_boss") == timer.name
+                and notice_ts_key in st.session_state
+            ):
+                age = (datetime.now(tz=MANILA) - st.session_state[notice_ts_key]).total_seconds()
+                if age < 1:
+                    force_open = True
+                else:
+                    # stop forcing open after 1 sec
+                    del st.session_state["last_saved_boss"]
+
+            # ✅ IMPORTANT: after 1 sec, we DO NOT pass expanded=... anymore
+            if force_open:
+                exp = st.expander(f"Edit {timer.name}", expanded=True)
+            else:
+                exp = st.expander(f"Edit {timer.name}")
+
+            with exp:
                 stored_date = timer.last_time.date()
                 stored_time = timer.last_time.time()
 
@@ -528,21 +547,13 @@ if st.session_state.auth:
                 )
 
                 # ✅ 1-second auto-hide green notification (below Last Time, above Save)
-                notice_key = f"save_notice_{timer.name}"
-                notice_ts_key = f"save_notice_ts_{timer.name}"
-
                 if notice_key in st.session_state and notice_ts_key in st.session_state:
-                    age = (datetime.now(tz=MANILA) - st.session_state[notice_ts_key]).total_seconds()
-
-                    if age < 1:
+                    age2 = (datetime.now(tz=MANILA) - st.session_state[notice_ts_key]).total_seconds()
+                    if age2 < 1:
                         st.success(st.session_state[notice_key])
                     else:
-                        # auto-clear after 1 second
                         del st.session_state[notice_key]
                         del st.session_state[notice_ts_key]
-                        # also clear last_saved_boss so expand won't keep forcing open
-                        if st.session_state.get("last_saved_boss") == timer.name:
-                            del st.session_state["last_saved_boss"]
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
