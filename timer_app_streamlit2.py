@@ -508,7 +508,7 @@ if st.session_state.auth:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
         for i, timer in enumerate(timers):
-            # ✅ FIX: auto-expand the one you just saved so the message is visible on first click
+            # ✅ auto-expand the one you just saved so the message is visible on first click
             expanded_now = (st.session_state.get("last_saved_boss") == timer.name)
 
             with st.expander(f"Edit {timer.name}", expanded=expanded_now):
@@ -527,17 +527,17 @@ if st.session_state.auth:
                     step=timedelta(minutes=1),
                 )
 
-                # ✅ 2-second auto-hide green notification (below Last Time, above Save)
+                # ✅ 1-second auto-hide green notification (below Last Time, above Save)
                 notice_key = f"save_notice_{timer.name}"
                 notice_ts_key = f"save_notice_ts_{timer.name}"
 
                 if notice_key in st.session_state and notice_ts_key in st.session_state:
                     age = (datetime.now(tz=MANILA) - st.session_state[notice_ts_key]).total_seconds()
 
-                    if age < 2:
+                    if age < 1:
                         st.success(st.session_state[notice_key])
                     else:
-                        # auto-clear after 2 seconds
+                        # auto-clear after 1 second
                         del st.session_state[notice_key]
                         del st.session_state[notice_ts_key]
                         # also clear last_saved_boss so expand won't keep forcing open
