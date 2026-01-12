@@ -584,11 +584,8 @@ if st.session_state.auth:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
         for i, timer in enumerate(timers):
-            # ✅ DO NOT auto-fold: keep whatever user sets manually.
-            # (We only auto-open the saved one once so the message is visible)
-            expanded_now = (st.session_state.get("last_saved_boss") == timer.name)
-
-            with st.expander(f"Edit {timer.name}", expanded=expanded_now):
+            # ✅ Let Streamlit remember expander state naturally (prevents auto-fold)
+            with st.expander(f"Edit {timer.name}"):
                 stored_date = timer.last_time.date()
                 stored_time = timer.last_time.time()
 
@@ -617,9 +614,6 @@ if st.session_state.auth:
                         # auto-clear after 1 second
                         del st.session_state[notice_key]
                         del st.session_state[notice_ts_key]
-                        # stop forcing-open once message expires
-                        if st.session_state.get("last_saved_boss") == timer.name:
-                            del st.session_state["last_saved_boss"]
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%m-%d-%Y | %H:%M")
@@ -644,15 +638,14 @@ if st.session_state.auth:
                         updated_last_time.strftime("%m-%d-%Y | %H:%M"),
                     )
 
-                    # ✅ Store message + timestamp + remember which boss was saved, then rerun
+                    # ✅ Store message + timestamp, then rerun so message appears immediately
                     st.session_state[notice_key] = (
                         f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%m-%d-%Y | %H:%M')}"
                     )
                     st.session_state[notice_ts_key] = datetime.now(tz=MANILA)
-                    st.session_state["last_saved_boss"] = timer.name
 
-                    # ✅ IMPORTANT: rerun so message appears immediately in the correct place
                     st.rerun()
+
 
 # Tab 3: Edit History
 if st.session_state.auth:
@@ -686,3 +679,4 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
