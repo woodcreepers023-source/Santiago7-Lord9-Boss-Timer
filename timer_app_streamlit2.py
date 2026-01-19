@@ -60,7 +60,6 @@ def _safe_load_json(path: Path, default):
         with path.open("r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
-        # If file is corrupted or empty, just fall back
         return default
 
 
@@ -82,26 +81,22 @@ def load_boss_data():
     data = _safe_load_json(DATA_FILE, None)
 
     if data is None:
-        # First run: use default data and save it
         data = default_boss_data.copy()
         save_boss_data(data)
     else:
-        # If JSON was saved as list of dicts accidentally, normalize it (SAFER)
+        # If JSON was saved as list of dicts accidentally, normalize it (safer)
         if data and isinstance(data[0], dict):
             normalized = []
             for d in data:
                 name = d.get("name")
                 interval = d.get("interval_minutes")
                 last_str = d.get("last_time_str")
-
-                # ✅ do NOT treat 0 as False; also force int(interval)
                 if name is not None and interval is not None and last_str:
                     normalized.append((name, int(interval), last_str))
-
             data = normalized
             save_boss_data(data)
 
-    # Ensure Supore always exists (case/whitespace-safe, prevents duplicates)
+    # Ensure Supore always exists (case/whitespace-safe)
     if not any(str(boss[0]).strip().lower() == "supore" for boss in data):
         data.append(("Supore", 3720, "2025-09-20 07:15 AM"))
         save_boss_data(data)
@@ -126,16 +121,14 @@ def log_edit(boss_name, old_time, new_time):
     with HISTORY_FILE.open("w", encoding="utf-8") as f:
         json.dump(history, f, indent=4, ensure_ascii=False)
 
-    # Send to Discord so guild can see who edited what
     send_discord_message(
         f"🛠 **{boss_name}** time updated by **{edited_by}**\n"
         f"Old: `{old_time}` → New: `{new_time}` (Manila time)"
     )
 
 
-# ------------------- History Normalizer (adds the | to old rows) -------------------
+# ------------------- History Normalizer -------------------
 def _parse_history_dt(s: str):
-    """Try multiple known formats from old/new versions."""
     if not s or not isinstance(s, str):
         return None
     s = s.strip()
@@ -143,8 +136,8 @@ def _parse_history_dt(s: str):
     fmts = [
         "%m-%d-%Y | %H:%M",   # NEW format for old_time/new_time
         "%Y-%m-%d %I:%M %p",  # OLD format in history
-        "%Y-%m-%d %H:%M",     # fallback
-        "%m-%d-%Y %H:%M",     # fallback
+        "%Y-%m-%d %H:%M",
+        "%m-%d-%Y %H:%M",
     ]
     for f in fmts:
         try:
@@ -155,14 +148,13 @@ def _parse_history_dt(s: str):
 
 
 def _parse_edited_at(s: str):
-    """edited_at is Month-Day-Year : 12hr format (but support old formats)."""
     if not s or not isinstance(s, str):
         return None
     s = s.strip()
 
     fmts = [
-        "%m-%d-%Y : %I:%M %p",  # NEW edited_at
-        "%Y-%m-%d %I:%M %p",    # OLD edited_at
+        "%m-%d-%Y : %I:%M %p",
+        "%Y-%m-%d %I:%M %p",
     ]
     for f in fmts:
         try:
@@ -173,7 +165,6 @@ def _parse_edited_at(s: str):
 
 
 def normalize_history_file():
-    """Rewrite boss_history.json so old records match your new display format."""
     if not HISTORY_FILE.exists():
         return
 
@@ -187,7 +178,6 @@ def normalize_history_file():
         if not isinstance(row, dict):
             continue
 
-        # old_time / new_time -> MM-DD-YYYY | HH:MM (24hr)
         for k in ["old_time", "new_time"]:
             dt = _parse_history_dt(row.get(k, ""))
             if dt is not None:
@@ -196,7 +186,6 @@ def normalize_history_file():
                     row[k] = new_val
                     changed = True
 
-        # edited_at -> MM-DD-YYYY : hh:mm AM/PM (12hr)
         dt_e = _parse_edited_at(row.get("edited_at", ""))
         if dt_e is not None:
             new_val = dt_e.strftime("%m-%d-%Y : %I:%M %p")
@@ -216,10 +205,7 @@ class TimerEntry:
         self.interval_minutes = int(interval_minutes)
         self.interval = timedelta(minutes=self.interval_minutes)
 
-        # Track if we had to fix a bad stored time string
         self._parse_fixed = False
-
-        # Defensive parsing: app won't crash if JSON has a weird string (or None)
         try:
             parsed_time = parse_dt(last_time_str)
         except Exception:
@@ -230,8 +216,12 @@ class TimerEntry:
         self.next_time = self.last_time + self.interval
 
     def update_next(self):
+        """
+        FIX: only advance ONE step when overdue (no multi-jump).
+        This prevents "big jumping" after maintenance/offline.
+        """
         now = datetime.now(tz=MANILA)
-        while self.next_time < now:
+        if self.next_time < now:
             self.last_time = self.next_time
             self.next_time = self.last_time + self.interval
 
@@ -251,7 +241,6 @@ class TimerEntry:
         return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
-# Helper for weekly countdown formatting
 def format_timedelta(td: timedelta) -> str:
     total_seconds = int(td.total_seconds())
     if total_seconds < 0:
@@ -272,22 +261,21 @@ def build_timers():
 # ------------------- Auto-advance & persist -------------------
 def advance_and_persist_if_needed(timers_list):
     """
-    Keeps timers correct (update_next) AND saves advanced last_time to JSON
-    so edit screen always matches what you see.
-
-    Also: if a stored time string was invalid, it gets fixed once and saved.
+    Advance timers (one-step) and save ONLY when something actually changed.
     """
     changed = False
 
     for t in timers_list:
-        # Persist parse-fixes once (so JSON becomes clean)
         if getattr(t, "_parse_fixed", False):
             changed = True
             t._parse_fixed = False
 
         old_last = t.last_time
+        old_next = t.next_time
+
         t.update_next()
-        if t.last_time != old_last:
+
+        if t.last_time != old_last or t.next_time != old_next:
             changed = True
 
     if changed:
@@ -297,6 +285,25 @@ def advance_and_persist_if_needed(timers_list):
                 for t in timers_list
             ]
         )
+
+
+# ------------------- Edit Inputs Sync Helpers -------------------
+def _mark_dirty(timer_name: str):
+    st.session_state[f"{timer_name}_dirty"] = True
+
+
+def sync_edit_widgets_from_timer(timer: TimerEntry):
+    """
+    Keep Edit tab inputs ALWAYS matching Field Boss Table 'Last Spawn',
+    unless user is currently editing that boss (dirty flag).
+    """
+    date_key = f"{timer.name}_last_date"
+    time_key = f"{timer.name}_last_time"
+    dirty_key = f"{timer.name}_dirty"
+
+    if not st.session_state.get(dirty_key, False):
+        st.session_state[date_key] = timer.last_time.date()
+        st.session_state[time_key] = timer.last_time.time().replace(second=0, microsecond=0)
 
 
 # ------------------- Streamlit Setup -------------------
@@ -309,7 +316,6 @@ if "timers" not in st.session_state:
 
 timers = st.session_state.timers
 advance_and_persist_if_needed(timers)
-
 
 # ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
@@ -335,7 +341,6 @@ if not st.session_state.auth:
                 st.rerun()
             else:
                 st.error("❌ Invalid name or password.")
-
 
 # ✅ Admin tools
 if st.session_state.get("auth", False):
@@ -364,7 +369,6 @@ weekly_boss_data = [
 
 
 def get_next_weekly_spawn(day_time: str):
-    """Convert 'Monday 11:30' to next datetime in Manila timezone."""
     now = datetime.now(tz=MANILA)
 
     day_time = " ".join(day_time.split())
@@ -398,9 +402,6 @@ def next_boss_banner(timers_list):
     if not timers_list:
         st.warning("No timers loaded.")
         return
-
-    for t in timers_list:
-        t.update_next()
 
     field_next = min(timers_list, key=lambda x: x.next_time)
     now = datetime.now(tz=MANILA)
@@ -501,9 +502,6 @@ def next_boss_banner(timers_list):
 
 # ------------------- Auto-Sorted Field Boss Table -------------------
 def display_boss_table_sorted(timers_list):
-    for t in timers_list:
-        t.update_next()
-
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
     countdown_cells = []
@@ -584,34 +582,38 @@ if st.session_state.auth:
         st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
         for i, timer in enumerate(timers):
-            # ✅ Let Streamlit remember expander state naturally (prevents auto-fold)
             with st.expander(f"Edit {timer.name}"):
-                stored_date = timer.last_time.date()
-                stored_time = timer.last_time.time()
+
+                # ✅ Keep edit inputs matching the table (Last Spawn),
+                # unless user is currently editing this boss.
+                sync_edit_widgets_from_timer(timer)
+
+                date_key = f"{timer.name}_last_date"
+                time_key = f"{timer.name}_last_time"
+                dirty_key = f"{timer.name}_dirty"
 
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
-                    value=stored_date,
-                    key=f"{timer.name}_last_date",
+                    key=date_key,
+                    on_change=_mark_dirty,
+                    args=(timer.name,),
                 )
                 new_time = st.time_input(
                     f"{timer.name} Last Time",
-                    value=stored_time,
-                    key=f"{timer.name}_last_time",
+                    key=time_key,
                     step=timedelta(minutes=1),
+                    on_change=_mark_dirty,
+                    args=(timer.name,),
                 )
 
-                # ✅ 1-second auto-hide green notification (below Last Time, above Save)
                 notice_key = f"save_notice_{timer.name}"
                 notice_ts_key = f"save_notice_ts_{timer.name}"
 
                 if notice_key in st.session_state and notice_ts_key in st.session_state:
                     age = (datetime.now(tz=MANILA) - st.session_state[notice_ts_key]).total_seconds()
-
                     if age < 1:
                         st.success(st.session_state[notice_key])
                     else:
-                        # auto-clear after 1 second
                         del st.session_state[notice_key]
                         del st.session_state[notice_ts_key]
 
@@ -624,7 +626,6 @@ if st.session_state.auth:
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
 
-                    # keep boss_timers.json as your original format (AM/PM) so parse_dt still works
                     save_boss_data(
                         [
                             (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
@@ -638,7 +639,9 @@ if st.session_state.auth:
                         updated_last_time.strftime("%m-%d-%Y | %H:%M"),
                     )
 
-                    # ✅ Store message + timestamp, then rerun so message appears immediately
+                    # ✅ clear dirty so it will sync again with table after saving
+                    st.session_state[dirty_key] = False
+
                     st.session_state[notice_key] = (
                         f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%m-%d-%Y | %H:%M')}"
                     )
@@ -646,22 +649,18 @@ if st.session_state.auth:
 
                     st.rerun()
 
-
 # Tab 3: Edit History
 if st.session_state.auth:
     with tab_selection[2]:
         st.subheader("Edit History")
 
-        # ✅ convert old rows so they show with "|" too
         normalize_history_file()
 
         if HISTORY_FILE.exists():
             history = _safe_load_json(HISTORY_FILE, [])
-
             if history:
                 df_history = pd.DataFrame(history)
 
-                # sort newest first
                 df_history["edited_at_dt"] = pd.to_datetime(
                     df_history["edited_at"],
                     format="%m-%d-%Y : %I:%M %p",
@@ -679,4 +678,3 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
