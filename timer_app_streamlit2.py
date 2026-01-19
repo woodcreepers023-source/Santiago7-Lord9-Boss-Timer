@@ -331,16 +331,16 @@ if not st.session_state.auth:
             type="password",
             key="login_password",
         )
-        login_clicked = st.form_submit_button("Login")
+        login_clicked = st.form_submit_button("Login")  # ✅ must be INSIDE the form
 
-        if login_clicked:
-            if password.strip() == ADMIN_PASSWORD and username.strip():
-                st.session_state.auth = True
-                st.session_state.username = username.strip()
-                st.success(f"✅ Access granted for {st.session_state.username}")
-                st.rerun()
-            else:
-                st.error("❌ Invalid name or password.")
+    if login_clicked:  # ✅ this should be OUTSIDE the form
+        if password.strip() == ADMIN_PASSWORD and username.strip():
+            st.session_state.auth = True
+            st.session_state.username = username.strip()
+            st.success(f"✅ Access granted for {st.session_state.username}")
+            st.rerun()
+        else:
+            st.error("❌ Invalid name or password.")
 
 # ✅ Admin tools
 if st.session_state.get("auth", False):
@@ -678,3 +678,4 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
