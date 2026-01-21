@@ -64,8 +64,14 @@ def _safe_load_json(path: Path, default):
 
 
 def save_boss_data(data):
-    with DATA_FILE.open("w", encoding="utf-8") as f:
+    """
+    Safer save (atomic replace) so JSON won't get corrupted
+    even if Streamlit reruns.
+    """
+    tmp = DATA_FILE.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
+    tmp.replace(DATA_FILE)
 
 
 # ✅ helper for consistent Manila-aware datetime parsing
@@ -118,8 +124,10 @@ def log_edit(boss_name, old_time, new_time):
 
     history.append(entry)
 
-    with HISTORY_FILE.open("w", encoding="utf-8") as f:
+    tmp = HISTORY_FILE.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
         json.dump(history, f, indent=4, ensure_ascii=False)
+    tmp.replace(HISTORY_FILE)
 
     send_discord_message(
         f"🛠 **{boss_name}** time updated by **{edited_by}**\n"
@@ -194,8 +202,10 @@ def normalize_history_file():
                 changed = True
 
     if changed:
-        with HISTORY_FILE.open("w", encoding="utf-8") as f:
+        tmp = HISTORY_FILE.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
             json.dump(history, f, indent=4, ensure_ascii=False)
+        tmp.replace(HISTORY_FILE)
 
 
 # ------------------- Timer Class -------------------
@@ -205,25 +215,30 @@ class TimerEntry:
         self.interval_minutes = int(interval_minutes)
         self.interval = timedelta(minutes=self.interval_minutes)
 
-        self._parse_fixed = False
+        # Defensive parsing (won't crash)
         try:
             parsed_time = parse_dt(last_time_str)
         except Exception:
             parsed_time = datetime.now(tz=MANILA)
-            self._parse_fixed = True
 
         self.last_time = parsed_time
         self.next_time = self.last_time + self.interval
 
-    def update_next(self):
+    def update_next_display_only(self):
         """
-        FIX: only advance ONE step when overdue (no multi-jump).
-        This prevents "big jumping" after maintenance/offline.
+        IMPORTANT:
+        Display-only auto-advance.
+        - Does NOT write back to JSON.
+        - Keeps countdown correct without changing saved last_time.
         """
         now = datetime.now(tz=MANILA)
-        if self.next_time < now:
-            self.last_time = self.next_time
-            self.next_time = self.last_time + self.interval
+        # Compute display next_time from saved last_time
+        n = self.last_time + self.interval
+        # advance next_time forward until it's in the future (display only)
+        # (this does NOT change self.last_time)
+        while n < now:
+            n = n + self.interval
+        self.next_time = n
 
     def countdown(self):
         return self.next_time - datetime.now(tz=MANILA)
@@ -258,33 +273,15 @@ def build_timers():
     return [TimerEntry(*data) for data in load_boss_data()]
 
 
-# ------------------- Auto-advance & persist -------------------
-def advance_and_persist_if_needed(timers_list):
+# ------------------- Display-only auto update -------------------
+def refresh_display_times(timers_list):
     """
-    Advance timers (one-step) and save ONLY when something actually changed.
+    Called every refresh.
+    Updates next_time for display only.
+    Does NOT save to JSON.
     """
-    changed = False
-
     for t in timers_list:
-        if getattr(t, "_parse_fixed", False):
-            changed = True
-            t._parse_fixed = False
-
-        old_last = t.last_time
-        old_next = t.next_time
-
-        t.update_next()
-
-        if t.last_time != old_last or t.next_time != old_next:
-            changed = True
-
-    if changed:
-        save_boss_data(
-            [
-                (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
-                for t in timers_list
-            ]
-        )
+        t.update_next_display_only()
 
 
 # ------------------- Edit Inputs Sync Helpers -------------------
@@ -315,7 +312,9 @@ if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 
 timers = st.session_state.timers
-advance_and_persist_if_needed(timers)
+
+# ✅ DO NOT write JSON here. Display-only refresh.
+refresh_display_times(timers)
 
 # ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
@@ -331,9 +330,9 @@ if not st.session_state.auth:
             type="password",
             key="login_password",
         )
-        login_clicked = st.form_submit_button("Login")  # ✅ must be INSIDE the form
+        login_clicked = st.form_submit_button("Login")
 
-    if login_clicked:  # ✅ this should be OUTSIDE the form
+    if login_clicked:
         if password.strip() == ADMIN_PASSWORD and username.strip():
             st.session_state.auth = True
             st.session_state.username = username.strip()
@@ -350,7 +349,7 @@ if st.session_state.get("auth", False):
         st.rerun()
 
 timers = st.session_state.timers
-advance_and_persist_if_needed(timers)
+refresh_display_times(timers)
 
 
 # ------------------- Weekly Boss Data -------------------
@@ -579,13 +578,12 @@ with tab_selection[0]:
 # Tab 2: Manage & Edit Timers
 if st.session_state.auth:
     with tab_selection[1]:
-        st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
+        st.subheader("Edit Boss Timers (Saved time will NOT change unless you click Save)")
 
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}"):
 
-                # ✅ Keep edit inputs matching the table (Last Spawn),
-                # unless user is currently editing this boss.
+                # ✅ Always show same last spawn as table
                 sync_edit_widgets_from_timer(timer)
 
                 date_key = f"{timer.name}_last_date"
@@ -621,11 +619,12 @@ if st.session_state.auth:
                     old_time_str = timer.last_time.strftime("%m-%d-%Y | %H:%M")
 
                     updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
-                    updated_next_time = updated_last_time + timer.interval
 
+                    # Update in memory
                     st.session_state.timers[i].last_time = updated_last_time
-                    st.session_state.timers[i].next_time = updated_next_time
+                    st.session_state.timers[i].next_time = updated_last_time + timer.interval
 
+                    # ✅ SAVE ONLY HERE (never on refresh)
                     save_boss_data(
                         [
                             (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
@@ -639,11 +638,13 @@ if st.session_state.auth:
                         updated_last_time.strftime("%m-%d-%Y | %H:%M"),
                     )
 
-                    # ✅ clear dirty so it will sync again with table after saving
                     st.session_state[dirty_key] = False
 
+                    # refresh display next_time after saving
+                    refresh_display_times(st.session_state.timers)
+
                     st.session_state[notice_key] = (
-                        f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%m-%d-%Y | %H:%M')}"
+                        f"✅ {timer.name} saved! Next: {(updated_last_time + timer.interval).strftime('%m-%d-%Y | %H:%M')}"
                     )
                     st.session_state[notice_ts_key] = datetime.now(tz=MANILA)
 
@@ -678,4 +679,3 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
