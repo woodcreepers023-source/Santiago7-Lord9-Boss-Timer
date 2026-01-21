@@ -50,7 +50,7 @@ default_boss_data = [
     ("Supore", 3720, "2025-09-20 07:15 AM"),
 ]
 
-# ------------------- JSON Persistence -------------------
+# ------------------- JSON Persistence (OLD TIMER STYLE) -------------------
 def _safe_load_json(path: Path, default):
     if not path.exists():
         return default
@@ -60,12 +60,14 @@ def _safe_load_json(path: Path, default):
     except Exception:
         return default
 
-def save_boss_data(data):
-    # Atomic-ish write to reduce corruption risk on frequent refresh
-    tmp = DATA_FILE.with_suffix(".tmp")
+def _atomic_json_write(path: Path, obj):
+    tmp = path.with_suffix(path.suffix + ".tmp")
     with tmp.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-    tmp.replace(DATA_FILE)
+        json.dump(obj, f, indent=4, ensure_ascii=False)
+    tmp.replace(path)
+
+def save_boss_data(data):
+    _atomic_json_write(DATA_FILE, data)
 
 def parse_dt(last_time_str: str) -> datetime:
     dt = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p")
@@ -74,12 +76,15 @@ def parse_dt(last_time_str: str) -> datetime:
 def load_boss_data():
     """
     Stored format in JSON: [ [name, interval_minutes, last_time_str], ... ]
+    OLD TIMER behavior applied:
+    - Only writes JSON on first-run / normalization / Supore add
+    - NOT writing every second
     """
     data = _safe_load_json(DATA_FILE, None)
 
     if data is None:
         data = default_boss_data.copy()
-        save_boss_data(data)
+        save_boss_data(data)  # IMPORTANT: write defaults immediately so it won't reset later
     else:
         # normalize if list[dict]
         if data and isinstance(data[0], dict):
@@ -112,10 +117,9 @@ def log_edit(boss_name, old_time, new_time):
         "edited_at": datetime.now(tz=MANILA).strftime("%m-%d-%Y : %I:%M %p"),
         "edited_by": edited_by,
     }
-
     history.append(entry)
-    with HISTORY_FILE.open("w", encoding="utf-8") as f:
-        json.dump(history, f, indent=4, ensure_ascii=False)
+
+    _atomic_json_write(HISTORY_FILE, history)
 
     send_discord_message(
         f"🛠 **{boss_name}** time updated by **{edited_by}**\n"
@@ -183,8 +187,7 @@ def normalize_history_file():
                 changed = True
 
     if changed:
-        with HISTORY_FILE.open("w", encoding="utf-8") as f:
-            json.dump(history, f, indent=4, ensure_ascii=False)
+        _atomic_json_write(HISTORY_FILE, history)
 
 # ------------------- Timer Class -------------------
 class TimerEntry:
@@ -203,19 +206,17 @@ class TimerEntry:
         self.last_time = parsed_time
         self.next_time = self.last_time + self.interval
 
-    def promote_if_due(self, now: datetime) -> bool:
+    def promote_if_due_one_step(self, now: datetime) -> bool:
         """
-        If next_time already passed, promote:
-        last_time = next_time, next_time = last_time + interval
-        Returns True if changed.
+        IMPORTANT CHANGE (anti-jump):
+        - Only promote ONE step when overdue.
+        - Prevents "big jumping" after downtime/maintenance.
         """
-        changed = False
-        # Use <= so exact hit promotes too
-        while self.next_time <= now:
+        if self.next_time <= now:
             self.last_time = self.next_time
             self.next_time = self.last_time + self.interval
-            changed = True
-        return changed
+            return True
+        return False
 
     def countdown(self):
         return self.next_time - datetime.now(tz=MANILA)
@@ -247,28 +248,24 @@ def format_timedelta(td: timedelta) -> str:
 def build_timers():
     return [TimerEntry(*data) for data in load_boss_data()]
 
-# ------------------- Maintenance-safe refresh -------------------
-def refresh_and_maybe_save(timers_list):
+# ------------------- Refresh (OLD TIMER STYLE) -------------------
+def refresh_timers_in_memory_only(timers_list):
     """
-    Auto-promote last spawn WHEN due, and save to JSON,
-    BUT only when Maintenance Mode is OFF.
+    OLD TIMER behavior applied:
+    - Timers can auto-advance IN MEMORY for display
+    - JSON is NOT auto-saved every second
+    - Maintenance Mode stops auto-advance entirely
     """
-    now = datetime.now(tz=MANILA)
-    changed = False
+    if st.session_state.get("maintenance_mode", False):
+        return
 
+    now = datetime.now(tz=MANILA)
     for t in timers_list:
+        # If parsing was fixed, we DO NOT auto-save; it'll save on next manual Save.
         if getattr(t, "_parse_fixed", False):
-            changed = True
             t._parse_fixed = False
 
-        if t.promote_if_due(now):
-            changed = True
-
-    # Only write JSON when maintenance mode is OFF
-    if changed and not st.session_state.get("maintenance_mode", False):
-        save_boss_data(
-            [(t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p")) for t in timers_list]
-        )
+        t.promote_if_due_one_step(now)
 
 # ------------------- Edit Inputs Sync Helpers -------------------
 def _mark_dirty(timer_name: str):
@@ -305,7 +302,7 @@ if not st.session_state.auth:
     with st.form("login_form"):
         username = st.text_input("Enter your name:", key="login_username")
         password = st.text_input("🔑 Enter password to edit timers:", type="password", key="login_password")
-        login_clicked = st.form_submit_button("Login")  # ✅ must be inside the form
+        login_clicked = st.form_submit_button("Login")
 
     if login_clicked:
         if password.strip() == ADMIN_PASSWORD and username.strip():
@@ -329,13 +326,13 @@ if "maintenance_mode" not in st.session_state:
 
 if st.session_state.get("auth", False):
     st.session_state.maintenance_mode = st.toggle(
-        "🛠️ Maintenance Mode (prevents auto-changing + auto-save)",
+        "🛠️ Maintenance Mode (FREEZE auto-change while you edit)",
         value=st.session_state.maintenance_mode,
-        help="Turn ON during maintenance while you mass-edit times. Turn OFF after maintenance so timers auto-update again.",
+        help="Turn ON during maintenance while you mass-edit times. Turn OFF after maintenance so timers can advance again (in memory).",
     )
 
 timers = st.session_state.timers
-refresh_and_maybe_save(timers)
+refresh_timers_in_memory_only(timers)
 
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
@@ -525,7 +522,7 @@ def display_weekly_boss_table():
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-# ---- Show the combined (field + weekly) next boss banner ----
+# ---- Show banner ----
 next_boss_banner(timers)
 
 # ------------------- Tabs -------------------
@@ -535,7 +532,7 @@ if st.session_state.auth:
     tabs.append("Edit History")
 tab_selection = st.tabs(tabs)
 
-# Tab 1: World Boss Spawn
+# Tab 1
 with tab_selection[0]:
     st.subheader("🗡️ Field Boss Spawn Table")
 
@@ -546,14 +543,15 @@ with tab_selection[0]:
         st.subheader("📅 Fixed Time Field Boss Spawn Table")
         display_weekly_boss_table()
 
-# Tab 2: Manage & Edit Timers
+# Tab 2
 if st.session_state.auth:
     with tab_selection[1]:
-        st.subheader("Edit Boss Timers (Last Spawn auto-updates AFTER it passes, when Maintenance Mode is OFF)")
+        st.subheader("Edit Boss Timers (Last Spawn = same as table)")
 
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}"):
 
+                # Keep inputs synced to table unless user is editing
                 sync_edit_widgets_from_timer(timer)
 
                 date_key = f"{timer.name}_last_date"
@@ -586,6 +584,7 @@ if st.session_state.auth:
                         del st.session_state[notice_ts_key]
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
+
                     old_time_str = timer.last_time.strftime("%m-%d-%Y | %H:%M")
 
                     updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
@@ -594,6 +593,7 @@ if st.session_state.auth:
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
 
+                    # SAVE ONLY ON MANUAL SAVE (old timer behavior)
                     save_boss_data(
                         [
                             (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
@@ -608,7 +608,6 @@ if st.session_state.auth:
                     )
 
                     st.session_state[dirty_key] = False
-
                     st.session_state[notice_key] = (
                         f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%m-%d-%Y | %H:%M')}"
                     )
@@ -616,7 +615,7 @@ if st.session_state.auth:
 
                     st.rerun()
 
-# Tab 3: Edit History
+# Tab 3
 if st.session_state.auth:
     with tab_selection[2]:
         st.subheader("Edit History")
