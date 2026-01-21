@@ -24,7 +24,6 @@ def send_discord_message(message: str):
     except Exception as e:
         print(f"Discord webhook error: {e}")
 
-
 # ------------------- Default Boss Data -------------------
 default_boss_data = [
     ("Venatus", 600, "2025-09-19 12:31 PM"),
@@ -51,65 +50,141 @@ default_boss_data = [
     ("Supore", 3720, "2025-09-20 07:15 AM"),
 ]
 
+# ------------------- JSON Persistence -------------------
+def _safe_load_json(path: Path, default):
+    if not path.exists():
+        return default
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
 
-# ------------------- JSON Persistence (OLD STYLE like you want) -------------------
+def save_boss_data(data):
+    # Atomic-ish write to reduce corruption risk on frequent refresh
+    tmp = DATA_FILE.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+    tmp.replace(DATA_FILE)
+
+def parse_dt(last_time_str: str) -> datetime:
+    dt = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p")
+    return dt.replace(tzinfo=MANILA)
+
 def load_boss_data():
-    if DATA_FILE.exists():
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            data = default_boss_data.copy()
-    else:
-        data = default_boss_data.copy()
+    """
+    Stored format in JSON: [ [name, interval_minutes, last_time_str], ... ]
+    """
+    data = _safe_load_json(DATA_FILE, None)
 
-    # Auto-add Supore if missing (case/whitespace safe)
-    if not any(str(b[0]).strip().lower() == "supore" for b in data):
+    if data is None:
+        data = default_boss_data.copy()
+        save_boss_data(data)
+    else:
+        # normalize if list[dict]
+        if data and isinstance(data[0], dict):
+            normalized = []
+            for d in data:
+                name = d.get("name")
+                interval = d.get("interval_minutes")
+                last_str = d.get("last_time_str")
+                if name is not None and interval is not None and last_str:
+                    normalized.append((name, int(interval), last_str))
+            data = normalized
+            save_boss_data(data)
+
+    # ensure Supore exists
+    if not any(str(boss[0]).strip().lower() == "supore" for boss in data):
         data.append(("Supore", 3720, "2025-09-20 07:15 AM"))
         save_boss_data(data)
 
     return data
 
-
-def save_boss_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-
-
+# ------------------- Edit History -------------------
 def log_edit(boss_name, old_time, new_time):
-    history = []
-    if HISTORY_FILE.exists():
-        try:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                history = json.load(f)
-        except Exception:
-            history = []
+    history = _safe_load_json(HISTORY_FILE, [])
+    edited_by = st.session_state.get("username", "Unknown")
 
-    history.append(
-        {
-            "boss": boss_name,
-            "old_time": old_time,
-            "new_time": new_time,
-            "edited_at": datetime.now(tz=MANILA).strftime("%m-%d-%Y : %I:%M %p"),
-            "edited_by": st.session_state.get("username", "Unknown"),
-        }
-    )
+    entry = {
+        "boss": boss_name,
+        "old_time": old_time,
+        "new_time": new_time,
+        "edited_at": datetime.now(tz=MANILA).strftime("%m-%d-%Y : %I:%M %p"),
+        "edited_by": edited_by,
+    }
 
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+    history.append(entry)
+    with HISTORY_FILE.open("w", encoding="utf-8") as f:
         json.dump(history, f, indent=4, ensure_ascii=False)
 
     send_discord_message(
-        f"🛠 **{boss_name}** time updated by **{st.session_state.get('username','Unknown')}**\n"
+        f"🛠 **{boss_name}** time updated by **{edited_by}**\n"
         f"Old: `{old_time}` → New: `{new_time}` (Manila time)"
     )
 
+def _parse_history_dt(s: str):
+    if not s or not isinstance(s, str):
+        return None
+    s = s.strip()
+    fmts = [
+        "%m-%d-%Y | %H:%M",
+        "%Y-%m-%d %I:%M %p",
+        "%Y-%m-%d %H:%M",
+        "%m-%d-%Y %H:%M",
+    ]
+    for f in fmts:
+        try:
+            return datetime.strptime(s, f).replace(tzinfo=MANILA)
+        except Exception:
+            pass
+    return None
 
-# ------------------- Time Parse -------------------
-def parse_dt(last_time_str: str) -> datetime:
-    # Stored format must stay: "%Y-%m-%d %I:%M %p"
-    dt = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p")
-    return dt.replace(tzinfo=MANILA)
+def _parse_edited_at(s: str):
+    if not s or not isinstance(s, str):
+        return None
+    s = s.strip()
+    fmts = [
+        "%m-%d-%Y : %I:%M %p",
+        "%Y-%m-%d %I:%M %p",
+    ]
+    for f in fmts:
+        try:
+            return datetime.strptime(s, f).replace(tzinfo=MANILA)
+        except Exception:
+            pass
+    return None
 
+def normalize_history_file():
+    if not HISTORY_FILE.exists():
+        return
+
+    history = _safe_load_json(HISTORY_FILE, [])
+    if not history:
+        return
+
+    changed = False
+    for row in history:
+        if not isinstance(row, dict):
+            continue
+
+        for k in ["old_time", "new_time"]:
+            dt = _parse_history_dt(row.get(k, ""))
+            if dt is not None:
+                new_val = dt.strftime("%m-%d-%Y | %H:%M")
+                if row.get(k) != new_val:
+                    row[k] = new_val
+                    changed = True
+
+        dt_e = _parse_edited_at(row.get("edited_at", ""))
+        if dt_e is not None:
+            new_val = dt_e.strftime("%m-%d-%Y : %I:%M %p")
+            if row.get("edited_at") != new_val:
+                row["edited_at"] = new_val
+                changed = True
+
+    if changed:
+        with HISTORY_FILE.open("w", encoding="utf-8") as f:
+            json.dump(history, f, indent=4, ensure_ascii=False)
 
 # ------------------- Timer Class -------------------
 class TimerEntry:
@@ -118,20 +193,24 @@ class TimerEntry:
         self.interval_minutes = int(interval_minutes)
         self.interval = timedelta(minutes=self.interval_minutes)
 
-        # parse defensively
+        self._parse_fixed = False
         try:
-            self.last_time = parse_dt(last_time_str)
+            parsed_time = parse_dt(last_time_str)
         except Exception:
-            self.last_time = datetime.now(tz=MANILA)
+            parsed_time = datetime.now(tz=MANILA)
+            self._parse_fixed = True
 
+        self.last_time = parsed_time
         self.next_time = self.last_time + self.interval
 
     def promote_if_due(self, now: datetime) -> bool:
         """
-        If next_time already passed, promote forward until next_time is in the future.
-        This is what makes Last Spawn auto-update AFTER boss spawn time passes.
+        If next_time already passed, promote:
+        last_time = next_time, next_time = last_time + interval
+        Returns True if changed.
         """
         changed = False
+        # Use <= so exact hit promotes too
         while self.next_time <= now:
             self.last_time = self.next_time
             self.next_time = self.last_time + self.interval
@@ -153,7 +232,6 @@ class TimerEntry:
             return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
         return f"{hours:02}:{minutes:02}:{seconds:02}"
 
-
 def format_timedelta(td: timedelta) -> str:
     total_seconds = int(td.total_seconds())
     if total_seconds < 0:
@@ -165,39 +243,40 @@ def format_timedelta(td: timedelta) -> str:
         return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
     return f"{hours:02}:{minutes:02}:{seconds:02}"
 
-
 # ------------------- Build Timers -------------------
 def build_timers():
-    return [TimerEntry(*row) for row in load_boss_data()]
+    return [TimerEntry(*data) for data in load_boss_data()]
 
-
-# ------------------- Auto-promote & save ONLY if changed -------------------
-def refresh_and_save_if_changed(timers_list):
+# ------------------- Maintenance-safe refresh -------------------
+def refresh_and_maybe_save(timers_list):
     """
-    This makes Field Boss Table and Edit Timers stay matched.
-    It will ONLY change Last Spawn automatically if the boss time already passed.
+    Auto-promote last spawn WHEN due, and save to JSON,
+    BUT only when Maintenance Mode is OFF.
     """
     now = datetime.now(tz=MANILA)
     changed = False
 
     for t in timers_list:
+        if getattr(t, "_parse_fixed", False):
+            changed = True
+            t._parse_fixed = False
+
         if t.promote_if_due(now):
             changed = True
 
-    if changed:
+    # Only write JSON when maintenance mode is OFF
+    if changed and not st.session_state.get("maintenance_mode", False):
         save_boss_data(
             [(t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p")) for t in timers_list]
         )
-
 
 # ------------------- Edit Inputs Sync Helpers -------------------
 def _mark_dirty(timer_name: str):
     st.session_state[f"{timer_name}_dirty"] = True
 
-
 def sync_edit_widgets_from_timer(timer: TimerEntry):
     """
-    Keep Edit tab inputs ALWAYS matching Field Boss Table 'Last Spawn',
+    Keep Edit tab inputs matching Field Boss Table 'Last Spawn',
     unless user is currently editing that boss (dirty flag).
     """
     date_key = f"{timer.name}_last_date"
@@ -208,7 +287,6 @@ def sync_edit_widgets_from_timer(timer: TimerEntry):
         st.session_state[date_key] = timer.last_time.date()
         st.session_state[time_key] = timer.last_time.time().replace(second=0, microsecond=0)
 
-
 # ------------------- Streamlit Setup -------------------
 st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
@@ -216,10 +294,6 @@ st_autorefresh(interval=1000, key="timer_refresh")
 
 if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
-
-timers = st.session_state.timers
-refresh_and_save_if_changed(timers)
-
 
 # ------------------- Password Gate -------------------
 if "auth" not in st.session_state:
@@ -231,7 +305,7 @@ if not st.session_state.auth:
     with st.form("login_form"):
         username = st.text_input("Enter your name:", key="login_username")
         password = st.text_input("🔑 Enter password to edit timers:", type="password", key="login_password")
-        login_clicked = st.form_submit_button("Login")
+        login_clicked = st.form_submit_button("Login")  # ✅ must be inside the form
 
     if login_clicked:
         if password.strip() == ADMIN_PASSWORD and username.strip():
@@ -242,6 +316,26 @@ if not st.session_state.auth:
         else:
             st.error("❌ Invalid name or password.")
 
+# ✅ Admin tools
+if st.session_state.get("auth", False):
+    if st.button("🔄 Reload timers from JSON"):
+        st.session_state.timers = build_timers()
+        st.success("Reloaded timers from boss_timers.json")
+        st.rerun()
+
+# ------------------- Maintenance Mode Toggle -------------------
+if "maintenance_mode" not in st.session_state:
+    st.session_state.maintenance_mode = False
+
+if st.session_state.get("auth", False):
+    st.session_state.maintenance_mode = st.toggle(
+        "🛠️ Maintenance Mode (prevents auto-changing + auto-save)",
+        value=st.session_state.maintenance_mode,
+        help="Turn ON during maintenance while you mass-edit times. Turn OFF after maintenance so timers auto-update again.",
+    )
+
+timers = st.session_state.timers
+refresh_and_maybe_save(timers)
 
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
@@ -257,7 +351,6 @@ weekly_boss_data = [
     ("Benji", ["Sunday 21:00"]),
 ]
 
-
 def get_next_weekly_spawn(day_time: str):
     now = datetime.now(tz=MANILA)
     day_time = " ".join(day_time.split())
@@ -265,22 +358,17 @@ def get_next_weekly_spawn(day_time: str):
     target_time = datetime.strptime(time_str, "%H:%M").time()
 
     weekday_map = {
-        "Monday": 0,
-        "Tuesday": 1,
-        "Wednesday": 2,
-        "Thursday": 3,
-        "Friday": 4,
-        "Saturday": 5,
-        "Sunday": 6,
+        "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
+        "Friday": 4, "Saturday": 5, "Sunday": 6,
     }
     target_weekday = weekday_map[day]
     days_ahead = (target_weekday - now.weekday()) % 7
     spawn_date = (now + timedelta(days=days_ahead)).date()
     spawn_dt = datetime.combine(spawn_date, target_time).replace(tzinfo=MANILA)
+
     if spawn_dt <= now:
         spawn_dt += timedelta(days=7)
     return spawn_dt
-
 
 # ------------------- Next Boss Banner -------------------
 def next_boss_banner(timers_list):
@@ -315,6 +403,7 @@ def next_boss_banner(timers_list):
         chosen_cd = weekly_best_cd
 
     remaining = chosen_cd.total_seconds()
+
     if remaining <= 60:
         cd_color = "red"
     elif remaining <= 300:
@@ -383,7 +472,6 @@ def next_boss_banner(timers_list):
         unsafe_allow_html=True,
     )
 
-
 # ------------------- Auto-Sorted Field Boss Table -------------------
 def display_boss_table_sorted(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
@@ -411,7 +499,6 @@ def display_boss_table_sorted(timers_list):
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-
 # ------------------- Weekly Table -------------------
 def display_weekly_boss_table():
     upcoming = []
@@ -438,8 +525,7 @@ def display_weekly_boss_table():
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-
-# ---- Show banner ----
+# ---- Show the combined (field + weekly) next boss banner ----
 next_boss_banner(timers)
 
 # ------------------- Tabs -------------------
@@ -449,9 +535,10 @@ if st.session_state.auth:
     tabs.append("Edit History")
 tab_selection = st.tabs(tabs)
 
-# Tab 1
+# Tab 1: World Boss Spawn
 with tab_selection[0]:
     st.subheader("🗡️ Field Boss Spawn Table")
+
     col1, col2 = st.columns([2, 1])
     with col1:
         display_boss_table_sorted(timers)
@@ -459,10 +546,10 @@ with tab_selection[0]:
         st.subheader("📅 Fixed Time Field Boss Spawn Table")
         display_weekly_boss_table()
 
-# Tab 2
+# Tab 2: Manage & Edit Timers
 if st.session_state.auth:
     with tab_selection[1]:
-        st.subheader("Edit Boss Timers (Last Spawn auto-updates AFTER it passes)")
+        st.subheader("Edit Boss Timers (Last Spawn auto-updates AFTER it passes, when Maintenance Mode is OFF)")
 
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}"):
@@ -487,42 +574,72 @@ if st.session_state.auth:
                     args=(timer.name,),
                 )
 
+                notice_key = f"save_notice_{timer.name}"
+                notice_ts_key = f"save_notice_ts_{timer.name}"
+
+                if notice_key in st.session_state and notice_ts_key in st.session_state:
+                    age = (datetime.now(tz=MANILA) - st.session_state[notice_ts_key]).total_seconds()
+                    if age < 1:
+                        st.success(st.session_state[notice_key])
+                    else:
+                        del st.session_state[notice_key]
+                        del st.session_state[notice_ts_key]
+
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%m-%d-%Y | %H:%M")
 
                     updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
-                    updated_last_time = updated_last_time.replace(second=0, microsecond=0)
                     updated_next_time = updated_last_time + timer.interval
 
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
 
-                    # Save to JSON (exact storage format)
                     save_boss_data(
-                        [(t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p")) for t in st.session_state.timers]
+                        [
+                            (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
+                            for t in st.session_state.timers
+                        ]
                     )
 
-                    log_edit(timer.name, old_time_str, updated_last_time.strftime("%m-%d-%Y | %H:%M"))
+                    log_edit(
+                        timer.name,
+                        old_time_str,
+                        updated_last_time.strftime("%m-%d-%Y | %H:%M"),
+                    )
 
                     st.session_state[dirty_key] = False
-                    st.success(f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%m-%d-%Y | %H:%M')}")
+
+                    st.session_state[notice_key] = (
+                        f"✅ {timer.name} saved! Next: {updated_next_time.strftime('%m-%d-%Y | %H:%M')}"
+                    )
+                    st.session_state[notice_ts_key] = datetime.now(tz=MANILA)
+
                     st.rerun()
 
-# Tab 3
+# Tab 3: Edit History
 if st.session_state.auth:
     with tab_selection[2]:
         st.subheader("Edit History")
+
+        normalize_history_file()
+
         if HISTORY_FILE.exists():
-            try:
-                with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                    history = json.load(f)
-            except Exception:
-                history = []
+            history = _safe_load_json(HISTORY_FILE, [])
             if history:
                 df_history = pd.DataFrame(history)
-                # best effort sort (newest first)
-                df_history["edited_at_dt"] = pd.to_datetime(df_history["edited_at"], errors="coerce")
-                df_history = df_history.sort_values("edited_at_dt", ascending=False).drop(columns=["edited_at_dt"])
+
+                df_history["edited_at_dt"] = pd.to_datetime(
+                    df_history["edited_at"],
+                    format="%m-%d-%Y : %I:%M %p",
+                    errors="coerce",
+                )
+
+                df_history = (
+                    df_history.sort_values("edited_at_dt", ascending=False)
+                    .drop(columns=["edited_at_dt"])
+                    .reset_index(drop=True)
+                )
+
                 st.dataframe(df_history, use_container_width=True)
             else:
                 st.info("No edits yet.")
