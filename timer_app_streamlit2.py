@@ -476,7 +476,7 @@ elif st.session_state.page == "history":
             if st.button("🛠️ Manage", use_container_width=True):
                 goto("manage")
         with t2:
-            if st.button("🌍 World", use_container_width=True):
+            if st.button("🌍👑 Boss Tracker", use_container_width=True):
                 goto("world")
         with t3:
             st.success(f"✅ Admin: {st.session_state.username}")
@@ -494,5 +494,6 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
