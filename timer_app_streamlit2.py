@@ -355,19 +355,13 @@ for t in timers:
 if st.session_state.page == "world":
     left_btn, mid_banner, right_space = st.columns([2, 6, 2])
 
-with left_btn:
-    st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)  # <-- move lower (change 28px)
-
-    if not st.session_state.auth:
-        if st.button("🔐 Login in FB"):
-            goto("login")
-    else:
-        if st.button("🛠️ Manage / Edit"):
-            goto("manage")
-
-    else:
-        if st.button("🛠️ Manage / Edit"):
-            goto("manage")
+    with left_btn:
+        if not st.session_state.auth:
+            if st.button("🔐 Login in FB"):
+                goto("login")
+        else:
+            if st.button("🛠️ Manage / Edit"):
+                goto("manage")
 
     with mid_banner:
         next_boss_banner_combined(timers)
@@ -500,5 +494,3 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
