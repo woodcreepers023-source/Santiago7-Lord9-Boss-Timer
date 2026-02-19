@@ -15,7 +15,7 @@ DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 
 # ✅ No st.secrets (use environment variables instead)
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv"
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1474182220599267451/4vFg3aIoCVnz631Nnc-zFhG38uBaePaBS3OsiDum2Ss4MGvoxGrxyml8JO6IipvjsT93"
 ADMIN_PASSWORD = "bestgame"
 
 WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
@@ -556,6 +556,7 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
