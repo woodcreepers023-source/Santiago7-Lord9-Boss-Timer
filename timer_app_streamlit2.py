@@ -370,7 +370,7 @@ def instakill_set_last_to_now(boss_name: str):
 def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
-    # ✅ Center ALL table headers (titles) (affects Weekly table too)
+    # ✅ Center ALL table headers (titles) (this affects the Weekly table too)
     st.markdown("""
     <style>
     table th {
@@ -382,13 +382,15 @@ def display_boss_table_sorted_newstyle(timers_list):
 
     # ---------------- Admin view (clickable skull) ----------------
     if st.session_state.get("auth"):
+        # Header
         header_cols = st.columns([2.2, 1.2, 2.2, 2.0, 1.6, 1.4, 0.9])
         header_labels = ["Boss Name", "Interval (min)", "Last Spawn", "Next Spawn Date", "Next Spawn Time", "Countdown", "InstaKill"]
         for c, label in zip(header_cols, header_labels):
-            c.markdown(f"<div class='tight-cell header-cell'>{label}</div>", unsafe_allow_html=True)
+            c.markdown(f"<div style='text-align:center; font-weight:700;'>{label}</div>", unsafe_allow_html=True)
 
-        st.markdown("<hr class='tight-hr'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin:6px 0 10px 0;'>", unsafe_allow_html=True)
 
+        # Rows
         for t in timers_sorted:
             secs = t.countdown().total_seconds()
             if secs <= 60:
@@ -400,16 +402,17 @@ def display_boss_table_sorted_newstyle(timers_list):
 
             row = st.columns([2.2, 1.2, 2.2, 2.0, 1.6, 1.4, 0.9])
 
-            row[0].markdown(f"<div class='tight-cell'>{t.name}</div>", unsafe_allow_html=True)
-            row[1].markdown(f"<div class='tight-cell'>{t.interval_minutes}</div>", unsafe_allow_html=True)
-            row[2].markdown(f"<div class='tight-cell'>{t.last_time.strftime('%m-%d-%Y | %H:%M')}</div>", unsafe_allow_html=True)
-            row[3].markdown(f"<div class='tight-cell'>{t.next_time.strftime('%b %d, %Y (%a)')}</div>", unsafe_allow_html=True)
-            row[4].markdown(f"<div class='tight-cell'>{t.next_time.strftime('%I:%M %p')}</div>", unsafe_allow_html=True)
+            row[0].markdown(f"<div style='text-align:center;'>{t.name}</div>", unsafe_allow_html=True)
+            row[1].markdown(f"<div style='text-align:center;'>{t.interval_minutes}</div>", unsafe_allow_html=True)
+            row[2].markdown(f"<div style='text-align:center;'>{t.last_time.strftime('%m-%d-%Y | %H:%M')}</div>", unsafe_allow_html=True)
+            row[3].markdown(f"<div style='text-align:center;'>{t.next_time.strftime('%b %d, %Y (%a)')}</div>", unsafe_allow_html=True)
+            row[4].markdown(f"<div style='text-align:center;'>{t.next_time.strftime('%I:%M %p')}</div>", unsafe_allow_html=True)
             row[5].markdown(
-                f"<div class='tight-cell' style='color:{color}; font-weight:600;'>{format_timedelta(t.countdown())}</div>",
+                f"<div style='text-align:center; color:{color}; font-weight:600;'>{format_timedelta(t.countdown())}</div>",
                 unsafe_allow_html=True
             )
 
+            # 💀 Click = set last spawn to NOW
             if row[6].button("💀", key=f"ik_{t.name}", help="Set Last Spawn to NOW"):
                 instakill_set_last_to_now(t.name)
 
@@ -470,61 +473,6 @@ def display_weekly_boss_table_newstyle():
 # ------------------- Streamlit Setup -------------------
 st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
-
-# ✅ Compact / closer spacing (tables + columns + buttons)
-st.markdown("""
-<style>
-
-/* Tighten Streamlit columns spacing */
-[data-testid="column"] {
-    padding-left: 6px !important;
-    padding-right: 6px !important;
-}
-
-/* Make HTML tables compact */
-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-}
-table th {
-    padding: 4px 6px !important;
-    text-align: center !important;
-    vertical-align: middle !important;
-}
-table td {
-    padding: 4px 6px !important;
-    text-align: center;
-    vertical-align: middle;
-}
-
-/* Admin "table-like" rows */
-.tight-cell {
-    text-align: center;
-    padding: 2px 0;
-    font-size: 13px;
-    line-height: 1.2;
-}
-.header-cell {
-    font-weight: 700;
-}
-
-/* Smaller line */
-.tight-hr {
-    margin: 6px 0 10px 0;
-    border: none;
-    border-top: 1px solid rgba(0,0,0,0.15);
-}
-
-/* Smaller skull button */
-.stButton > button {
-    padding: 2px 8px !important;
-    min-height: 0px !important;
-    line-height: 1.2 !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
 
 # ------------------- Session defaults -------------------
 st.session_state.setdefault("auth", False)
