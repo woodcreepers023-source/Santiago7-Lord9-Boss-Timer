@@ -309,12 +309,80 @@ def next_boss_banner_combined(field_timers):
         unsafe_allow_html=True,
     )
 
-# ------------------- Field Boss Table -------------------
-def display_boss_table_sorted_newstyle(timers_list):
+# ------------------- 🔴 KILLED NOW + Table Rendering -------------------
+def mark_boss_killed(timer_index: int):
+    """Admin action: set last_time to NOW (Manila), recompute next, save JSON, log, discord."""
+    timers = st.session_state.timers
+    t = timers[timer_index]
+
+    old_time_str = t.last_time.strftime("%Y-%m-%d %I:%M %p")
+
+    # IMPORTANT: keep same format (no seconds) because TimerEntry parser expects it
+    now_dt = now_manila().replace(second=0, microsecond=0)
+
+    t.last_time = now_dt
+    t.next_time = now_dt + timedelta(seconds=t.interval_seconds)
+
+    # Save all timers in the same stored format
+    save_boss_data([
+        (x.name, x.interval_minutes, x.last_time.strftime("%Y-%m-%d %I:%M %p"))
+        for x in timers
+    ])
+
+    # Log edit history
+    log_edit(t.name, old_time_str, now_dt.strftime("%Y-%m-%d %I:%M %p"))
+
+    # Discord message (include seconds here is fine)
+    killed_time = now_dt.strftime("%I:%M %p")
+    killer = st.session_state.get("username", "Admin")
+    send_discord_message(f"🩸 **{t.name}** was killed by **{killer}** at **{killed_time}** (Manila Time)")
+
+    st.rerun()
+
+def display_boss_table_sorted_with_killed(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
-    countdown_cells = []
+    is_admin = bool(st.session_state.get("auth", False))
+
+    # Force primary buttons to be RED (only affects buttons using type="primary")
+    st.markdown("""
+    <style>
+    button[kind="primary"]{
+        background-color:#ff2b2b !important;
+        border:1px solid #ff2b2b !important;
+        color:white !important;
+        font-weight:800 !important;
+    }
+    button[kind="primary"]:hover{
+        background-color:#cc0000 !important;
+        border:1px solid #cc0000 !important;
+        color:white !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Header row
+    if is_admin:
+        h1, h2, h3, h4, h5, h6, h7 = st.columns([2.0, 1.0, 2.2, 2.2, 1.5, 1.4, 1.2])
+    else:
+        h1, h2, h3, h4, h5, h6 = st.columns([2.0, 1.0, 2.2, 2.2, 1.5, 1.4])
+
+    h1.markdown("**Boss Name**")
+    h2.markdown("**Interval (min)**")
+    h3.markdown("**Last Spawn**")
+    h4.markdown("**Next Spawn Date**")
+    h5.markdown("**Next Spawn Time**")
+    h6.markdown("**Countdown**")
+    if is_admin:
+        h7.markdown("**Killed**")
+
+    st.divider()
+
+    # Rows
     for t in timers_sorted:
+        # find the real index inside session_state.timers so we can update the correct timer
+        real_index = next(i for i, x in enumerate(st.session_state.timers) if x.name == t.name)
+
         secs = t.countdown().total_seconds()
         if secs <= 60:
             color = "red"
@@ -322,19 +390,24 @@ def display_boss_table_sorted_newstyle(timers_list):
             color = "orange"
         else:
             color = "green"
-        countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
 
-    data = {
-        "Boss Name": [t.name for t in timers_sorted],
-        "Interval (min)": [t.interval_minutes for t in timers_sorted],
-        "Last Spawn": [t.last_time.strftime("%m-%d-%Y | %H:%M") for t in timers_sorted],
-        "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
-        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
-        "Countdown": countdown_cells,
-    }
+        cd_html = f"<span style='color:{color}; font-weight:800'>{format_timedelta(t.countdown())}</span>"
 
-    df = pd.DataFrame(data)
-    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+        if is_admin:
+            c1, c2, c3, c4, c5, c6, c7 = st.columns([2.0, 1.0, 2.2, 2.2, 1.5, 1.4, 1.2])
+        else:
+            c1, c2, c3, c4, c5, c6 = st.columns([2.0, 1.0, 2.2, 2.2, 1.5, 1.4])
+
+        c1.write(t.name)
+        c2.write(t.interval_minutes)
+        c3.write(t.last_time.strftime("%m-%d-%Y | %H:%M"))
+        c4.write(t.next_time.strftime("%b %d, %Y (%a)"))
+        c5.write(t.next_time.strftime("%I:%M %p"))
+        c6.markdown(cd_html, unsafe_allow_html=True)
+
+        if is_admin:
+            if c7.button("🔴 KILLED NOW", key=f"kill_{t.name}", type="primary"):
+                mark_boss_killed(real_index)
 
 # ------------------- Weekly Table -------------------
 def display_weekly_boss_table_newstyle():
@@ -416,7 +489,9 @@ if st.session_state.page == "world":
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        display_boss_table_sorted_newstyle(timers)
+        # ✅ NEW table that supports admin-only KILLED NOW button
+        display_boss_table_sorted_with_killed(timers)
+
     with col2:
         st.subheader("📅 Weekly Boss Spawns (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
@@ -532,5 +607,3 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
