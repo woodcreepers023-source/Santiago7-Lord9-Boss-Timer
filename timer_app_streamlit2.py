@@ -140,49 +140,6 @@ def format_timedelta(td: timedelta) -> str:
 def build_timers():
     return [TimerEntry(*data) for data in load_boss_data()]
 
-# ------------------- Streamlit Setup -------------------
-st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
-st.title("🛡️ Lord9 Santiago 7 Boss Timer")
-st_autorefresh(interval=1000, key="timer_refresh")
-
-if "timers" not in st.session_state:
-    st.session_state.timers = build_timers()
-timers = st.session_state.timers
-
-# Keep timers updated every refresh (OLD behavior)
-for t in timers:
-    t.update_next()
-
-# ------------------- SIDEBAR LOGIN (Option A) -------------------
-if "auth" not in st.session_state:
-    st.session_state.auth = False
-if "username" not in st.session_state:
-    st.session_state.username = ""
-
-with st.sidebar:
-    st.markdown("### 🔐 Login")
-
-    if not st.session_state.auth:
-        with st.form("login_form_sidebar"):
-            username_in = st.text_input("Name", key="login_username_sidebar")
-            password_in = st.text_input("Password", type="password", key="login_password_sidebar")
-            login_clicked = st.form_submit_button("Login", use_container_width=True)
-
-        if login_clicked:
-            if password_in == ADMIN_PASSWORD and username_in.strip():
-                st.session_state.auth = True
-                st.session_state.username = username_in.strip()
-                st.success(f"✅ Access granted for {st.session_state.username}")
-                st.rerun()
-            else:
-                st.error("❌ Invalid name or password.")
-    else:
-        st.success(f"✅ Admin: {st.session_state.username}")
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.auth = False
-            st.session_state.username = ""
-            st.rerun()
-
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
     ("Clemantis", ["Monday 11:30", "Thursday 19:00"]),
@@ -319,8 +276,6 @@ def next_boss_banner_combined(field_timers):
         unsafe_allow_html=True,
     )
 
-next_boss_banner_combined(timers)
-
 # ------------------- Field Boss Table (NEW columns + emoji style) -------------------
 def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
@@ -374,15 +329,52 @@ def display_weekly_boss_table_newstyle():
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-# ------------------- Tabs -------------------
-tabs = ["World Boss Spawn"]
-if st.session_state.auth:
-    tabs.append("Manage & Edit Timers")
-    tabs.append("Edit History")
-tab_selection = st.tabs(tabs)
+# ------------------- Streamlit Setup -------------------
+st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
+st.title("🛡️ Lord9 Santiago 7 Boss Timer")
 
-# Tab 1: World Boss Spawn
-with tab_selection[0]:
+# ------------------- Session defaults -------------------
+st.session_state.setdefault("auth", False)
+st.session_state.setdefault("username", "")
+st.session_state.setdefault("page", "world")  # world | login | manage | history
+
+def goto(page_name: str):
+    st.session_state.page = page_name
+    st.rerun()
+
+# ------------------- Auto-refresh ONLY on World page -------------------
+if st.session_state.page == "world":
+    st_autorefresh(interval=1000, key="timer_refresh")
+
+# ------------------- Load timers -------------------
+# Keep your session timers behavior
+if "timers" not in st.session_state:
+    st.session_state.timers = build_timers()
+timers = st.session_state.timers
+
+# Keep timers updated (only matters on world page since only that refreshes every second)
+for t in timers:
+    t.update_next()
+
+# Banner (still shows on all pages; if you want it only on world page, tell me)
+next_boss_banner_combined(timers)
+
+st.divider()
+
+# ------------------- WORLD PAGE (with Login to Edit beside header) -------------------
+if st.session_state.page == "world":
+    left, right = st.columns([3, 1])
+    with left:
+        st.subheader("🗺️ World Boss Spawn")
+    with right:
+        if not st.session_state.auth:
+            if st.button("🔐 Login to Edit", use_container_width=True):
+                goto("login")
+        else:
+            if st.button("🛠️ Manage / Edit", use_container_width=True):
+                goto("manage")
+
+    st.markdown("---")
     st.subheader("🗡️ Field Boss Spawn Table")
 
     col1, col2 = st.columns([2, 1])
@@ -392,9 +384,56 @@ with tab_selection[0]:
         st.subheader("📅 Weekly Bosses (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
 
-# Tab 2: Manage & Edit Timers (NO sync logic, simple old behavior)
-if st.session_state.auth:
-    with tab_selection[1]:
+    if not st.session_state.auth:
+        st.info("Click **Login to Edit** to update boss times (auto-refresh pauses while editing).")
+
+# ------------------- LOGIN PAGE -------------------
+elif st.session_state.page == "login":
+    st.subheader("🔐 Login (Edit Access)")
+    st.caption("Auto-refresh is paused here so the page won’t fold while you type.")
+
+    with st.form("login_form_page"):
+        username_in = st.text_input("Name", key="login_username_page")
+        password_in = st.text_input("Password", type="password", key="login_password_page")
+        login_clicked = st.form_submit_button("Login", use_container_width=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("⬅️ Back", use_container_width=True):
+            goto("world")
+
+    if login_clicked:
+        if password_in == ADMIN_PASSWORD and username_in.strip():
+            st.session_state.auth = True
+            st.session_state.username = username_in.strip()
+            st.success(f"✅ Access granted for {st.session_state.username}")
+            goto("manage")
+        else:
+            st.error("❌ Invalid name or password.")
+
+# ------------------- MANAGE PAGE -------------------
+elif st.session_state.page == "manage":
+    if not st.session_state.auth:
+        st.warning("You must login first.")
+        if st.button("Go to Login", use_container_width=True):
+            goto("login")
+    else:
+        top1, top2, top3, top4 = st.columns([1.2, 1.2, 1.2, 2.4])
+
+        with top1:
+            if st.button("🌍 World", use_container_width=True):
+                goto("world")
+        with top2:
+            if st.button("📜 History", use_container_width=True):
+                goto("history")
+        with top3:
+            if st.button("🚪 Logout", use_container_width=True):
+                st.session_state.auth = False
+                st.session_state.username = ""
+                goto("world")
+        with top4:
+            st.success(f"✅ Admin: {st.session_state.username}")
+
         st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
         for i, timer in enumerate(timers):
@@ -429,9 +468,23 @@ if st.session_state.auth:
 
                     st.success(f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}")
 
-# Tab 3: Edit History
-if st.session_state.auth:
-    with tab_selection[2]:
+# ------------------- HISTORY PAGE -------------------
+elif st.session_state.page == "history":
+    if not st.session_state.auth:
+        st.warning("You must login first.")
+        if st.button("Go to Login", use_container_width=True):
+            goto("login")
+    else:
+        t1, t2, t3 = st.columns([1.2, 1.2, 3.6])
+        with t1:
+            if st.button("🛠️ Manage", use_container_width=True):
+                goto("manage")
+        with t2:
+            if st.button("🌍 World", use_container_width=True):
+                goto("world")
+        with t3:
+            st.success(f"✅ Admin: {st.session_state.username}")
+
         st.subheader("📜 Edit History")
 
         if HISTORY_FILE.exists():
