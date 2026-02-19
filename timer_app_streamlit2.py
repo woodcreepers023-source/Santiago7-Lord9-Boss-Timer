@@ -14,40 +14,6 @@ DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 ADMIN_PASSWORD = "password"
 
-# ------------------- Sidebar Collapse Helpers (Streamlit Cloud safe) -------------------
-def collapse_sidebar():
-    """
-    Streamlit Cloud: collapse by clicking the sidebar collapse button,
-    with retries and using both document + parent.document.
-    """
-    st.markdown(
-        """
-        <script>
-        (function () {
-          function getDocQuery(sel) {
-            return document.querySelector(sel) || (parent && parent.document && parent.document.querySelector(sel));
-          }
-
-          function isSidebarOpen() {
-            const sb = getDocQuery('[data-testid="stSidebar"]');
-            if (!sb) return false;
-            const r = sb.getBoundingClientRect();
-            return r.width > 0;
-          }
-
-          function tryCollapse() {
-            const btn = getDocQuery('[data-testid="stSidebarCollapseButton"]');
-            if (!btn) { setTimeout(tryCollapse, 80); return; }
-            if (isSidebarOpen()) btn.click();
-          }
-
-          setTimeout(tryCollapse, 120);
-        })();
-        </script>
-        """,
-        unsafe_allow_html=True,
-    )
-
 # ------------------- Discord -------------------
 def send_discord_message(message: str):
     if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "YOUR_DISCORD_WEBHOOK_HERE":
@@ -175,18 +141,9 @@ def build_timers():
     return [TimerEntry(*data) for data in load_boss_data()]
 
 # ------------------- Streamlit Setup -------------------
-st.set_page_config(
-    page_title="Lord9 Santiago 7 Boss Timer",
-    layout="wide",
-    initial_sidebar_state="collapsed"  # ✅ closed on first visit
-)
+st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
 st_autorefresh(interval=1000, key="timer_refresh")
-
-# ✅ Run collapse on the NEXT rerun (more reliable on Streamlit Cloud)
-if st.session_state.get("collapse_next_run", False):
-    st.session_state.collapse_next_run = False
-    collapse_sidebar()
 
 if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
@@ -196,7 +153,7 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
-# ------------------- SIDEBAR LOGIN (Auto-fold after login/logout) -------------------
+# ------------------- SIDEBAR LOGIN (Option A) -------------------
 if "auth" not in st.session_state:
     st.session_state.auth = False
 if "username" not in st.session_state:
@@ -215,9 +172,7 @@ with st.sidebar:
             if password_in == ADMIN_PASSWORD and username_in.strip():
                 st.session_state.auth = True
                 st.session_state.username = username_in.strip()
-
-                # ✅ request collapse on next run
-                st.session_state.collapse_next_run = True
+                st.success(f"✅ Access granted for {st.session_state.username}")
                 st.rerun()
             else:
                 st.error("❌ Invalid name or password.")
@@ -226,9 +181,6 @@ with st.sidebar:
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.auth = False
             st.session_state.username = ""
-
-            # ✅ request collapse on next run
-            st.session_state.collapse_next_run = True
             st.rerun()
 
 # ------------------- Weekly Boss Data -------------------
@@ -440,7 +392,7 @@ with tab_selection[0]:
         st.subheader("📅 Weekly Bosses (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
 
-# Tab 2: Manage & Edit Timers
+# Tab 2: Manage & Edit Timers (NO sync logic, simple old behavior)
 if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
