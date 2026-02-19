@@ -12,7 +12,7 @@ MANILA = ZoneInfo("Asia/Manila")
 DISCORD_WEBHOOK_URL = "YOUR_DISCORD_WEBHOOK_HERE"
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
-ADMIN_PASSWORD = "password"
+ADMIN_PASSWORD = "bestgame"
 
 # ------------------- Discord -------------------
 def send_discord_message(message: str):
@@ -445,3 +445,4 @@ if st.session_state.auth:
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
