@@ -347,34 +347,31 @@ if st.session_state.page == "world":
     st_autorefresh(interval=1000, key="timer_refresh")
 
 # ------------------- Load timers -------------------
-# Keep your session timers behavior
 if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
 
-# Keep timers updated (only matters on world page since only that refreshes every second)
 for t in timers:
     t.update_next()
 
-# Banner (still shows on all pages; if you want it only on world page, tell me)
+# ------------------- WORLD PAGE TOP-RIGHT SMALL BUTTON (like your screenshot) -------------------
+if st.session_state.page == "world":
+    spacer, topbtn = st.columns([8, 2])
+    with topbtn:
+        if not st.session_state.auth:
+            if st.button("🔐 Login in FB"):
+                goto("login")
+        else:
+            if st.button("🛠️ Manage / Edit"):
+                goto("manage")
+
+# Banner
 next_boss_banner_combined(timers)
 
 st.divider()
 
-# ------------------- WORLD PAGE (with Login to Edit beside header) -------------------
+# ------------------- WORLD PAGE CONTENT -------------------
 if st.session_state.page == "world":
-    left, right = st.columns([3, 1])
-    with left:
-        st.subheader("🗺️ World Boss Spawn")
-    with right:
-        if not st.session_state.auth:
-            if st.button("🔐 Login to Edit", use_container_width=True):
-                goto("login")
-        else:
-            if st.button("🛠️ Manage / Edit", use_container_width=True):
-                goto("manage")
-
-    st.markdown("---")
     st.subheader("🗡️ Field Boss Spawn Table")
 
     col1, col2 = st.columns([2, 1])
@@ -383,9 +380,6 @@ if st.session_state.page == "world":
     with col2:
         st.subheader("📅 Weekly Bosses (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
-
-    if not st.session_state.auth:
-        st.info("Click **Login to Edit** to update boss times (auto-refresh pauses while editing).")
 
 # ------------------- LOGIN PAGE -------------------
 elif st.session_state.page == "login":
