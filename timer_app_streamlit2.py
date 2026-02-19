@@ -54,7 +54,7 @@ default_boss_data = [
     ("Undomiel", 1440, "2025-09-19 04:42 PM"),
     ("Araneo", 1440, "2025-09-19 04:33 PM"),
     ("Lady Dalia", 1080, "2025-09-19 05:58 AM"),
-    ("General Aqulcus", 1740, "2025-09-18 09:45 PM"),
+    ("General Aquleus", 1740, "2025-09-18 09:45 PM"),
     ("Amentis", 1740, "2025-09-18 09:42 PM"),
     ("Baron Braudmore", 1920, "2025-09-19 12:37 AM"),
     ("Wannitas", 2880, "2025-09-19 04:46 PM"),
@@ -532,4 +532,5 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
