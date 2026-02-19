@@ -330,7 +330,7 @@ def display_boss_table_sorted_newstyle(timers_list):
 
         countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
 
-        # ✅ InstaKill: skull on every row
+        # ✅ InstaKill: skull on every row (only shown for admin below)
         instakill_cells.append("<span class='skull-icon' title='InstaKill'>💀</span>")
 
     data = {
@@ -340,13 +340,15 @@ def display_boss_table_sorted_newstyle(timers_list):
         "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
         "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
         "Countdown": countdown_cells,
-        "InstaKill": instakill_cells,  # ✅ NEW COLUMN
     }
+
+    # ✅ InstaKill column ONLY appears when admin is logged in
+    if st.session_state.get("auth"):
+        data["InstaKill"] = instakill_cells
 
     df = pd.DataFrame(data)
 
     # ✅ Center ALL column TITLES (headers) + keep InstaKill centered + Hover turns red
-    # This CSS will also affect the Weekly table because it is also a <table>.
     st.markdown("""
     <style>
 
@@ -356,7 +358,7 @@ def display_boss_table_sorted_newstyle(timers_list):
         vertical-align: middle !important;
     }
 
-    /* ✅ Keep InstaKill column centered */
+    /* ✅ If InstaKill exists, keep last column centered */
     table td:last-child,
     table th:last-child {
         text-align: center;
