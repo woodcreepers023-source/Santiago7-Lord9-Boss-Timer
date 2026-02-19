@@ -331,6 +331,7 @@ def display_boss_table_sorted_newstyle(timers_list):
         "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
         "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
         "Countdown": countdown_cells,
+        "InstaKill": instakill_cells,
     }
 
     df = pd.DataFrame(data)
@@ -532,3 +533,4 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
