@@ -412,15 +412,6 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
-# ✅ Manual Discord test button (World page only)
-if st.session_state.page == "world":
-    if st.button("🧪 Test Discord Now"):
-        ok = send_discord_message("🔥 TEST MESSAGE FROM LORD9 TIMER (manual test)")
-        if ok:
-            st.success("✅ Sent! Check your Discord channel.")
-        else:
-            st.error("❌ Failed to send. (Webhook / permissions / network)")
-
 # ✅ Send Discord 5-min warnings ONLY on world page
 if st.session_state.page == "world":
     send_5min_warnings(timers)
