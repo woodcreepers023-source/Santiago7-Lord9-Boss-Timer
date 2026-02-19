@@ -14,8 +14,13 @@ MANILA = ZoneInfo("Asia/Manila")
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 
-# ✅ No st.secrets (use environment variables instead)
+# ✅ Put your webhook here (do NOT share it)
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1474182220599267451/4vFg3aIoCVnz631Nnc-zFhG38uBaePaBS3OsiDum2Ss4MGvoxGrxyml8JO6IipvjsT93"
+
+# ✅ Role mention (Discord role ID)
+ROLE_ID = "1447357096608661694"
+ROLE_MENTION = f"<@&{ROLE_ID}>" if ROLE_ID else ""
+
 ADMIN_PASSWORD = "bestgame"
 
 WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
@@ -25,22 +30,17 @@ def send_discord_message(message: str) -> bool:
     """Send a message to Discord via webhook. Returns True if sent."""
     if not DISCORD_WEBHOOK_URL:
         return False
+
+    payload = {
+        "content": message,
+        # ✅ ensure role mention works from webhook
+        "allowed_mentions": {"roles": [ROLE_ID]} if ROLE_ID else {"parse": []},
+    }
+
     try:
-        r = requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=10)
-        ok = 200 <= r.status_code < 300
-
-        # Debug info (safe, does not reveal webhook)
-        if not ok:
-            st.warning(f"Discord webhook failed: HTTP {r.status_code}")
-            try:
-                st.code(r.text[:500])
-            except Exception:
-                pass
-
-        return ok
-    except Exception as e:
-        st.warning("Discord request exception:")
-        st.code(repr(e))
+        r = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
+        return 200 <= r.status_code < 300
+    except Exception:
         return False
 
 # ------------------- Helpers -------------------
@@ -121,7 +121,6 @@ class TimerEntry:
         self.name = name
         self.interval_minutes = int(interval_minutes)
         self.interval_seconds = self.interval_minutes * 60
-
         self.last_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
         self.next_time = self.last_time + timedelta(seconds=self.interval_seconds)
 
@@ -183,10 +182,20 @@ def _warn_key(source: str, boss_name: str, spawn_dt: datetime) -> str:
 def send_5min_warnings(field_timers):
     """
     Sends ONE warning per boss per spawn when remaining time is within 5 minutes.
-    Only runs while the app reruns (world page open).
+    Runs while the app reruns (world page open).
     """
     st.session_state.setdefault("warn_sent", {})
     now = now_manila()
+
+    def build_msg(name: str, spawn_dt: datetime) -> str:
+        # ✅ role ping included for BOTH field & weekly
+        mention_line = f"\n{ROLE_MENTION}" if ROLE_MENTION else ""
+        return (
+            f"⏳ **5-minute warning!**\n"
+            f"**{name}** spawns at **{spawn_dt.strftime('%I:%M %p')}** (Manila)\n"
+            f"Time left: `{format_timedelta(spawn_dt - now)}`"
+            f"{mention_line}"
+        )
 
     # Field bosses
     for t in field_timers:
@@ -195,12 +204,7 @@ def send_5min_warnings(field_timers):
         if 0 < remaining <= WARNING_WINDOW_SECONDS:
             key = _warn_key("FIELD", t.name, spawn_dt)
             if not st.session_state.warn_sent.get(key, False):
-                msg = (
-                    f"⏳ **5-minute warning!**\n"
-                    f"**{t.name}** spawns at **{spawn_dt.strftime('%I:%M %p')}** (Manila)\n"
-                    f"Time left: `{format_timedelta(spawn_dt - now)}`"
-                )
-                if send_discord_message(msg):
+                if send_discord_message(build_msg(t.name, spawn_dt)):
                     st.session_state.warn_sent[key] = True
 
     # Weekly bosses
@@ -211,12 +215,7 @@ def send_5min_warnings(field_timers):
             if 0 < remaining <= WARNING_WINDOW_SECONDS:
                 key = _warn_key("WEEKLY", boss, spawn_dt)
                 if not st.session_state.warn_sent.get(key, False):
-                    msg = (
-                        f"⏳ **5-minute warning!**\n"
-                        f"**{boss}** spawns at **{spawn_dt.strftime('%I:%M %p')}** (Manila)\n"
-                        f"Time left: `{format_timedelta(spawn_dt - now)}`"
-                    )
-                    if send_discord_message(msg):
+                    if send_discord_message(build_msg(boss, spawn_dt)):
                         st.session_state.warn_sent[key] = True
 
     # prevent unbounded growth
@@ -556,7 +555,3 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
-
-
