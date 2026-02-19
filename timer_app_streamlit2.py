@@ -66,12 +66,6 @@ def load_boss_data():
     else:
         data = default_boss_data.copy()
 
-    # Auto-add Supore if missing
-    if not any(boss[0] == "Supore" for boss in data):
-        data.append(("Supore", 3720, "2025-09-20 07:15 AM"))
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4)
-
     return data
 
 def save_boss_data(data):
@@ -559,3 +553,4 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
