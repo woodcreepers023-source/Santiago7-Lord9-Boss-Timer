@@ -354,17 +354,15 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
-# ------------------- WORLD PAGE (aligned button row) -------------------
+# ------------------- WORLD PAGE TOP-RIGHT SMALL BUTTON (like your screenshot) -------------------
 if st.session_state.page == "world":
-    left_hdr, right_btn = st.columns([2, 1])
-    with left_hdr:
-        st.write("")  # spacing
-    with right_btn:
+    spacer, topbtn = st.columns([8, 2])
+    with topbtn:
         if not st.session_state.auth:
-            if st.button("🔐 Login in FB", use_container_width=True):
+            if st.button("🔐 Login in FB"):
                 goto("login")
         else:
-            if st.button("🛠️ Manage / Edit", use_container_width=True):
+            if st.button("🛠️ Manage / Edit"):
                 goto("manage")
 
 # Banner
@@ -382,9 +380,6 @@ if st.session_state.page == "world":
     with col2:
         st.subheader("📅 Weekly Bosses (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
-
-    if not st.session_state.auth:
-        st.info("Click **Login in FB** to update boss times (auto-refresh pauses while editing).")
 
 # ------------------- LOGIN PAGE -------------------
 elif st.session_state.page == "login":
