@@ -14,6 +14,21 @@ DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 ADMIN_PASSWORD = "password"
 
+# ------------------- Collapse Sidebar Helper -------------------
+def collapse_sidebar():
+    # Tries to click Streamlit's collapse button
+    st.markdown(
+        """
+        <script>
+        (function() {
+          const btn = parent.document.querySelector('[data-testid="stSidebarCollapseButton"]');
+          if (btn) btn.click();
+        })();
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+
 # ------------------- Discord -------------------
 def send_discord_message(message: str):
     if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "YOUR_DISCORD_WEBHOOK_HERE":
@@ -141,7 +156,11 @@ def build_timers():
     return [TimerEntry(*data) for data in load_boss_data()]
 
 # ------------------- Streamlit Setup -------------------
-st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
+st.set_page_config(
+    page_title="Lord9 Santiago 7 Boss Timer",
+    layout="wide",
+    initial_sidebar_state="collapsed"  # ✅ closed on first visit
+)
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
 st_autorefresh(interval=1000, key="timer_refresh")
 
@@ -173,6 +192,9 @@ with st.sidebar:
                 st.session_state.auth = True
                 st.session_state.username = username_in.strip()
                 st.success(f"✅ Access granted for {st.session_state.username}")
+
+                # ✅ auto fold sidebar after login
+                collapse_sidebar()
                 st.rerun()
             else:
                 st.error("❌ Invalid name or password.")
@@ -181,6 +203,9 @@ with st.sidebar:
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.auth = False
             st.session_state.username = ""
+
+            # ✅ auto fold sidebar after logout
+            collapse_sidebar()
             st.rerun()
 
 # ------------------- Weekly Boss Data -------------------
@@ -224,11 +249,9 @@ def next_boss_banner_combined(field_timers):
 
     now = datetime.now(tz=MANILA)
 
-    # Field next
     field_next = min(field_timers, key=lambda x: x.next_time)
     field_cd = field_next.next_time - now
 
-    # Weekly next
     weekly_best_name = None
     weekly_best_time = None
     weekly_best_cd = None
@@ -241,7 +264,6 @@ def next_boss_banner_combined(field_timers):
                 weekly_best_name = boss
                 weekly_best_time = spawn_dt
 
-    # Choose nearest overall
     chosen_name = field_next.name
     chosen_time = field_next.next_time
     chosen_cd = field_cd
@@ -392,7 +414,7 @@ with tab_selection[0]:
         st.subheader("📅 Weekly Bosses (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
 
-# Tab 2: Manage & Edit Timers (NO sync logic, simple old behavior)
+# Tab 2: Manage & Edit Timers
 if st.session_state.auth:
     with tab_selection[1]:
         st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
