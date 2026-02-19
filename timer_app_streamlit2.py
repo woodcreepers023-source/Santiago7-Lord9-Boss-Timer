@@ -316,7 +316,6 @@ def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
     countdown_cells = []
-    instakill_cells = []
 
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
@@ -330,9 +329,6 @@ def display_boss_table_sorted_newstyle(timers_list):
 
         countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
 
-        # ✅ InstaKill: skull on every row (only shown for admin below)
-        instakill_cells.append("<span class='skull-icon' title='InstaKill'>💀</span>")
-
     data = {
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
@@ -342,13 +338,9 @@ def display_boss_table_sorted_newstyle(timers_list):
         "Countdown": countdown_cells,
     }
 
-    # ✅ InstaKill column ONLY appears when admin is logged in
-    if st.session_state.get("auth"):
-        data["InstaKill"] = instakill_cells
-
     df = pd.DataFrame(data)
 
-    # ✅ Center ALL column TITLES (headers) + keep InstaKill centered + Hover turns red
+    # ✅ Center ALL column TITLES (headers)
     st.markdown("""
     <style>
 
@@ -358,24 +350,6 @@ def display_boss_table_sorted_newstyle(timers_list):
         vertical-align: middle !important;
     }
 
-    /* ✅ If InstaKill exists, keep last column centered */
-    table td:last-child,
-    table th:last-child {
-        text-align: center;
-        vertical-align: middle;
-    }
-
-    .skull-icon{
-        cursor: default;
-        display: inline-block;
-        padding: 2px 6px;
-        border-radius: 6px;
-        line-height: 1.2;
-        transition: background-color .15s ease;
-    }
-    .skull-icon:hover{
-        background-color: red;
-    }
     </style>
     """, unsafe_allow_html=True)
 
