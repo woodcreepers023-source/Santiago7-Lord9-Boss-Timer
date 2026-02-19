@@ -333,7 +333,6 @@ def display_boss_table_sorted_newstyle(timers_list):
         # ✅ InstaKill: skull on every row
         instakill_cells.append("<span class='skull-icon' title='InstaKill'>💀</span>")
 
-
     data = {
         "Boss Name": [t.name for t in timers_sorted],
         "Interval (min)": [t.interval_minutes for t in timers_sorted],
@@ -346,9 +345,15 @@ def display_boss_table_sorted_newstyle(timers_list):
 
     df = pd.DataFrame(data)
 
-    # ✅ Hover effect: background turns red
+    # ✅ Center InstaKill column + Hover turns red
     st.markdown("""
     <style>
+    table td:last-child,
+    table th:last-child {
+        text-align: center;
+        vertical-align: middle;
+    }
+
     .skull-icon{
         cursor: default;
         display: inline-block;
@@ -561,4 +566,3 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
