@@ -19,7 +19,7 @@ def send_discord_message(message: str):
     if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "YOUR_DISCORD_WEBHOOK_HERE":
         return
     try:
-        requests.post(DISCORD_WEBHOOK_URL, json={"content": message})
+        requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=5)
     except Exception as e:
         print(f"Discord webhook error: {e}")
 
@@ -69,29 +69,37 @@ def save_boss_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
+# ------------------- Edit History -------------------
 def log_edit(boss_name, old_time, new_time):
     history = []
     if HISTORY_FILE.exists():
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
             history = json.load(f)
 
-    history.append({
+    edited_by = st.session_state.get("username", "Unknown")
+    entry = {
         "boss": boss_name,
         "old_time": old_time,
         "new_time": new_time,
         "edited_at": datetime.now(tz=MANILA).strftime("%Y-%m-%d %I:%M %p"),
-        "edited_by": st.session_state.get("username", "Unknown"),
-    })
+        "edited_by": edited_by,
+    }
+    history.append(entry)
 
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=4)
 
-# ------------------- Timer Class -------------------
+    send_discord_message(
+        f"🛠 **{boss_name}** time updated by **{edited_by}**\n"
+        f"Old: `{old_time}` → New: `{new_time}` (Manila time)"
+    )
+
+# ------------------- Timer Class (OLD logic) -------------------
 class TimerEntry:
     def __init__(self, name, interval_minutes, last_time_str):
         self.name = name
-        self.interval_minutes = interval_minutes
-        self.interval = interval_minutes * 60
+        self.interval_minutes = int(interval_minutes)
+        self.interval = self.interval_minutes * 60  # seconds
         parsed_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
         self.last_time = parsed_time
         self.next_time = self.last_time + timedelta(seconds=self.interval)
@@ -117,6 +125,17 @@ class TimerEntry:
             return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
         return f"{hours:02}:{minutes:02}:{seconds:02}"
 
+def format_timedelta(td: timedelta) -> str:
+    total_seconds = int(td.total_seconds())
+    if total_seconds < 0:
+        return "00:00:00"
+    days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if days > 0:
+        return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
 # ------------------- Build Timers -------------------
 def build_timers():
     return [TimerEntry(*data) for data in load_boss_data()]
@@ -129,6 +148,10 @@ st_autorefresh(interval=1000, key="timer_refresh")
 if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
+
+# Keep timers updated every refresh (OLD behavior)
+for t in timers:
+    t.update_next()
 
 # ------------------- SIDEBAR LOGIN (Option A) -------------------
 if "auth" not in st.session_state:
@@ -160,50 +183,6 @@ with st.sidebar:
             st.session_state.username = ""
             st.rerun()
 
-# ------------------- Next Boss Banner -------------------
-def next_boss_banner(timers_list):
-    for t in timers_list:
-        t.update_next()
-    next_timer = min(timers_list, key=lambda x: x.countdown())
-    remaining = next_timer.countdown().total_seconds()
-
-    if remaining <= 60:
-        cd_color = "red"
-    elif remaining <= 300:
-        cd_color = "orange"
-    else:
-        cd_color = "green"
-
-    st.markdown(
-        f"<h2 style='text-align:center'>Next Boss: {next_timer.name} | "
-        f"Spawn: {next_timer.next_time.strftime('%Y-%m-%d %I:%M %p')} | "
-        f"<span style='color:{cd_color}'>{next_timer.format_countdown()}</span></h2>",
-        unsafe_allow_html=True
-    )
-
-next_boss_banner(timers)
-
-# ------------------- Auto-Sorted Table -------------------
-def display_boss_table_sorted(timers_list):
-    for t in timers_list:
-        t.update_next()
-
-    timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
-
-    data = {
-        "Boss Name": [t.name for t in timers_sorted],
-        "Interval (min)": [t.interval_minutes for t in timers_sorted],
-        "Last Time": [t.last_time.strftime("%Y-%m-%d %I:%M %p") for t in timers_sorted],
-        "Countdown": [
-            f"<span style='color:{'red' if t.countdown().total_seconds() <= 60 else 'orange' if t.countdown().total_seconds() <= 300 else 'green'}'>{t.format_countdown()}</span>"
-            for t in timers_sorted
-        ],
-        "Next Spawn": [t.next_time.strftime("%Y-%m-%d %I:%M %p") for t in timers_sorted],
-    }
-
-    df = pd.DataFrame(data)
-    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
-
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
     ("Clemantis", ["Monday 11:30", "Thursday 19:00"]),
@@ -218,14 +197,14 @@ weekly_boss_data = [
 ]
 
 def get_next_weekly_spawn(day_time: str):
-    """Convert 'Monday 11:30' to next datetime in Manila timezone."""
     now = datetime.now(tz=MANILA)
-    day, time_str = day_time.split()
+    day_time = " ".join(day_time.split())
+    day, time_str = day_time.split(" ", 1)
     target_time = datetime.strptime(time_str, "%H:%M").time()
 
     weekday_map = {
         "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
-        "Friday": 4, "Saturday": 5, "Sunday": 6
+        "Friday": 4, "Saturday": 5, "Sunday": 6,
     }
     target_weekday = weekday_map[day]
 
@@ -235,27 +214,160 @@ def get_next_weekly_spawn(day_time: str):
 
     if spawn_dt <= now:
         spawn_dt += timedelta(days=7)
-
     return spawn_dt
 
-def display_weekly_boss_table():
-    """Display sorted weekly bosses by nearest spawn time (with countdown)."""
-    upcoming = []
-    for boss, times in weekly_boss_data:
-        for t in times:
-            spawn_dt = get_next_weekly_spawn(t)
-            countdown = spawn_dt - datetime.now(tz=MANILA)
-            upcoming.append((boss, t, spawn_dt, countdown))
+# ------------------- Fancy Next Boss Banner (NEW design) -------------------
+def next_boss_banner_combined(field_timers):
+    if not field_timers:
+        st.warning("No timers loaded.")
+        return
 
-    upcoming_sorted = sorted(upcoming, key=lambda x: x[2])
+    now = datetime.now(tz=MANILA)
+
+    # Field next
+    field_next = min(field_timers, key=lambda x: x.next_time)
+    field_cd = field_next.next_time - now
+
+    # Weekly next
+    weekly_best_name = None
+    weekly_best_time = None
+    weekly_best_cd = None
+    for boss, times in weekly_boss_data:
+        for sched in times:
+            spawn_dt = get_next_weekly_spawn(sched)
+            cd = spawn_dt - now
+            if weekly_best_cd is None or cd < weekly_best_cd:
+                weekly_best_cd = cd
+                weekly_best_name = boss
+                weekly_best_time = spawn_dt
+
+    # Choose nearest overall
+    chosen_name = field_next.name
+    chosen_time = field_next.next_time
+    chosen_cd = field_cd
+    if weekly_best_cd is not None and weekly_best_cd < field_cd:
+        chosen_name = weekly_best_name
+        chosen_time = weekly_best_time
+        chosen_cd = weekly_best_cd
+
+    remaining = chosen_cd.total_seconds()
+    if remaining <= 60:
+        cd_color = "red"
+    elif remaining <= 300:
+        cd_color = "orange"
+    else:
+        cd_color = "limegreen"
+
+    time_only = chosen_time.strftime("%I:%M %p")
+    cd_str = format_timedelta(chosen_cd)
+
+    st.markdown(
+        f"""
+        <style>
+        .banner-container {{
+            display: flex;
+            justify-content: center;
+            margin: 20px 0 5px 0;
+        }}
+        .boss-banner {{
+            background: linear-gradient(90deg, #0f172a, #1d4ed8, #16a34a);
+            padding: 14px 28px;
+            border-radius: 999px;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.75);
+            color: #f9fafb;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }}
+        .boss-banner-title {{
+            font-size: 28px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: 0.03em;
+        }}
+        .boss-banner-row {{
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 18px;
+        }}
+        .banner-chip {{
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.7);
+        }}
+        </style>
+
+        <div class="banner-container">
+            <div class="boss-banner">
+                <h2 class="boss-banner-title">
+                    Next Boss: <strong>{chosen_name}</strong>
+                </h2>
+                <div class="boss-banner-row">
+                    <span class="banner-chip">
+                        🕒 <strong>{time_only}</strong>
+                    </span>
+                    <span class="banner-chip" style="color:{cd_color}; border-color:{cd_color};">
+                        ⏳ <strong>{cd_str}</strong>
+                    </span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+next_boss_banner_combined(timers)
+
+# ------------------- Field Boss Table (NEW columns + emoji style) -------------------
+def display_boss_table_sorted_newstyle(timers_list):
+    timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
+
+    countdown_cells = []
+    for t in timers_sorted:
+        secs = t.countdown().total_seconds()
+        if secs <= 60:
+            color = "red"
+        elif secs <= 300:
+            color = "orange"
+        else:
+            color = "green"
+        countdown_cells.append(f"<span style='color:{color}'>{t.format_countdown()}</span>")
 
     data = {
-        "Boss": [b[0] for b in upcoming_sorted],
-        "Schedule": [b[1] for b in upcoming_sorted],
-        "Next Spawn": [b[2].strftime("%Y-%m-%d %a %I:%M %p") for b in upcoming_sorted],
+        "Boss Name": [t.name for t in timers_sorted],
+        "Interval (min)": [t.interval_minutes for t in timers_sorted],
+        "Last Spawn": [t.last_time.strftime("%m-%d-%Y | %H:%M") for t in timers_sorted],
+        "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
+        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
+        "Countdown": countdown_cells,
+    }
+
+    df = pd.DataFrame(data)
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+# ------------------- Weekly Table (NEW style) -------------------
+def display_weekly_boss_table_newstyle():
+    upcoming = []
+    now = datetime.now(tz=MANILA)
+
+    for boss, times in weekly_boss_data:
+        for sched in times:
+            spawn_dt = get_next_weekly_spawn(sched)
+            countdown = spawn_dt - now
+            upcoming.append((boss, spawn_dt, countdown))
+
+    upcoming_sorted = sorted(upcoming, key=lambda x: x[1])
+
+    data = {
+        "Boss Name": [row[0] for row in upcoming_sorted],
+        "Day": [row[1].strftime("%A") for row in upcoming_sorted],
+        "Time": [row[1].strftime("%I:%M %p") for row in upcoming_sorted],
         "Countdown": [
-            f"<span style='color:{'red' if b[3].total_seconds() <= 60 else 'orange' if b[3].total_seconds() <= 300 else 'green'}'>{str(b[3]).split('.')[0]}</span>"
-            for b in upcoming_sorted
+            f"<span style='color:{'red' if row[2].total_seconds() <= 60 else 'orange' if row[2].total_seconds() <= 300 else 'green'}'>{format_timedelta(row[2])}</span>"
+            for row in upcoming_sorted
         ],
     }
 
@@ -271,19 +383,20 @@ tab_selection = st.tabs(tabs)
 
 # Tab 1: World Boss Spawn
 with tab_selection[0]:
-    st.subheader("World Boss Spawn Table")
+    st.subheader("🗡️ Field Boss Spawn Table")
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        display_boss_table_sorted(timers)
+        display_boss_table_sorted_newstyle(timers)
     with col2:
         st.subheader("📅 Weekly Bosses (Auto-Sorted)")
-        display_weekly_boss_table()
+        display_weekly_boss_table_newstyle()
 
-# Tab 2: Manage & Edit Timers
+# Tab 2: Manage & Edit Timers (NO sync logic, simple old behavior)
 if st.session_state.auth:
     with tab_selection[1]:
-        st.subheader("Edit Boss Timers (Edit Last Time, Next auto-updates)")
+        st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
+
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
                 new_date = st.date_input(
@@ -319,10 +432,12 @@ if st.session_state.auth:
 # Tab 3: Edit History
 if st.session_state.auth:
     with tab_selection[2]:
-        st.subheader("Edit History")
+        st.subheader("📜 Edit History")
+
         if HISTORY_FILE.exists():
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
                 history = json.load(f)
+
             if history:
                 df_history = pd.DataFrame(history).sort_values("edited_at", ascending=False)
                 st.dataframe(df_history, use_container_width=True)
