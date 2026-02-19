@@ -330,11 +330,9 @@ def display_boss_table_sorted_newstyle(timers_list):
 
         countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
 
-        # ✅ InstaKill: skull only (shows when within 5 minutes)
-        if 0 <= secs <= 300:
-            instakill_cells.append("<span class='skull-icon' title='InstaKill Window'>💀</span>")
-        else:
-            instakill_cells.append("")
+        # ✅ InstaKill: skull on every row
+        instakill_cells.append("<span class='skull-icon' title='InstaKill'>💀</span>")
+
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
@@ -563,3 +561,4 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
