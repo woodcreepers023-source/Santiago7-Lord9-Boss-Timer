@@ -318,7 +318,7 @@ def display_weekly_boss_table_newstyle():
 
     data = {
         "Boss Name": [row[0] for row in upcoming_sorted],
-        "Day": [row[1].strftime("%A") for row[1] in upcoming_sorted],
+        "Day": [row[1].strftime("%A") for row in upcoming_sorted],
         "Time": [row[1].strftime("%I:%M %p") for row in upcoming_sorted],
         "Countdown": [
             f"<span style='color:{'red' if row[2].total_seconds() <= 60 else 'orange' if row[2].total_seconds() <= 300 else 'green'}'>{format_timedelta(row[2])}</span>"
@@ -332,18 +332,6 @@ def display_weekly_boss_table_newstyle():
 # ------------------- Streamlit Setup -------------------
 st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
-
-# ------------------- CSS: constrain width on login/manage/history -------------------
-st.markdown("""
-<style>
-/* Constrained containers */
-.narrow { max-width: 900px; margin: 0 auto; }
-.narrow-login { max-width: 600px; margin: 0 auto; }
-
-/* Make buttons not full width */
-div.stButton > button { width: auto !important; }
-</style>
-""", unsafe_allow_html=True)
 
 # ------------------- Session defaults -------------------
 st.session_state.setdefault("auth", False)
@@ -359,29 +347,31 @@ if st.session_state.page == "world":
     st_autorefresh(interval=1000, key="timer_refresh")
 
 # ------------------- Load timers -------------------
+# Keep your session timers behavior
 if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
 
+# Keep timers updated (only matters on world page since only that refreshes every second)
 for t in timers:
     t.update_next()
 
-# Banner
+# Banner (still shows on all pages; if you want it only on world page, tell me)
 next_boss_banner_combined(timers)
 
 st.divider()
 
-# ------------------- WORLD PAGE -------------------
+# ------------------- WORLD PAGE (with Login to Edit beside header) -------------------
 if st.session_state.page == "world":
-    left, right = st.columns([5, 1.2])
+    left, right = st.columns([3, 1])
     with left:
         st.subheader("🗺️ World Boss Spawn")
     with right:
         if not st.session_state.auth:
-            if st.button("🔐 Login to Edit"):
+            if st.button("🔐 Login to Edit", use_container_width=True):
                 goto("login")
         else:
-            if st.button("🛠️ Manage / Edit"):
+            if st.button("🛠️ Manage / Edit", use_container_width=True):
                 goto("manage")
 
     st.markdown("---")
@@ -397,22 +387,20 @@ if st.session_state.page == "world":
     if not st.session_state.auth:
         st.info("Click **Login to Edit** to update boss times (auto-refresh pauses while editing).")
 
-# ------------------- LOGIN PAGE (narrow) -------------------
+# ------------------- LOGIN PAGE -------------------
 elif st.session_state.page == "login":
-    st.markdown('<div class="narrow-login">', unsafe_allow_html=True)
-
     st.subheader("🔐 Login (Edit Access)")
     st.caption("Auto-refresh is paused here so the page won’t fold while you type.")
 
     with st.form("login_form_page"):
         username_in = st.text_input("Name", key="login_username_page")
         password_in = st.text_input("Password", type="password", key="login_password_page")
-        login_clicked = st.form_submit_button("Login")
+        login_clicked = st.form_submit_button("Login", use_container_width=True)
 
-    if st.button("⬅️ Back"):
-        goto("world")
-
-    st.markdown('</div>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("⬅️ Back", use_container_width=True):
+            goto("world")
 
     if login_clicked:
         if password_in == ADMIN_PASSWORD and username_in.strip():
@@ -423,24 +411,23 @@ elif st.session_state.page == "login":
         else:
             st.error("❌ Invalid name or password.")
 
-# ------------------- MANAGE PAGE (narrow) -------------------
+# ------------------- MANAGE PAGE -------------------
 elif st.session_state.page == "manage":
     if not st.session_state.auth:
         st.warning("You must login first.")
-        if st.button("Go to Login"):
+        if st.button("Go to Login", use_container_width=True):
             goto("login")
     else:
-        st.markdown('<div class="narrow">', unsafe_allow_html=True)
+        top1, top2, top3, top4 = st.columns([1.2, 1.2, 1.2, 2.4])
 
-        top1, top2, top3, top4 = st.columns([1, 1, 1, 3])
         with top1:
-            if st.button("🌍 World"):
+            if st.button("🌍 World", use_container_width=True):
                 goto("world")
         with top2:
-            if st.button("📜 History"):
+            if st.button("📜 History", use_container_width=True):
                 goto("history")
         with top3:
-            if st.button("🚪 Logout"):
+            if st.button("🚪 Logout", use_container_width=True):
                 st.session_state.auth = False
                 st.session_state.username = ""
                 goto("world")
@@ -481,23 +468,19 @@ elif st.session_state.page == "manage":
 
                     st.success(f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}")
 
-        st.markdown('</div>', unsafe_allow_html=True)
-
-# ------------------- HISTORY PAGE (narrow) -------------------
+# ------------------- HISTORY PAGE -------------------
 elif st.session_state.page == "history":
     if not st.session_state.auth:
         st.warning("You must login first.")
-        if st.button("Go to Login"):
+        if st.button("Go to Login", use_container_width=True):
             goto("login")
     else:
-        st.markdown('<div class="narrow">', unsafe_allow_html=True)
-
-        t1, t2, t3 = st.columns([1, 1, 3])
+        t1, t2, t3 = st.columns([1.2, 1.2, 3.6])
         with t1:
-            if st.button("🛠️ Manage"):
+            if st.button("🛠️ Manage", use_container_width=True):
                 goto("manage")
         with t2:
-            if st.button("🌍 World"):
+            if st.button("🌍 World", use_container_width=True):
                 goto("world")
         with t3:
             st.success(f"✅ Admin: {st.session_state.username}")
@@ -515,5 +498,3 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-        st.markdown('</div>', unsafe_allow_html=True)
