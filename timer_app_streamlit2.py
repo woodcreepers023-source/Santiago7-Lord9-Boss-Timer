@@ -357,7 +357,7 @@ if st.session_state.page == "world":
 
     with left_btn:
         if not st.session_state.auth:
-            if st.button("🔐 Login in FB"):
+            if st.button("🔐 Login to edit timers"):
                 goto("login")
         else:
             if st.button("🛠️ Manage / Edit"):
@@ -494,3 +494,4 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
