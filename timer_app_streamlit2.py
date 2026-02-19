@@ -440,7 +440,6 @@ if st.session_state.page == "world":
         st.subheader("📅 Weekly Boss Spawns (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
 
-    st.caption("⚠️ Reminder: Discord warnings only trigger while the World page is running (open), because Streamlit Cloud may sleep.")
 
 # ------------------- LOGIN PAGE -------------------
 elif st.session_state.page == "login":
@@ -553,4 +552,5 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
