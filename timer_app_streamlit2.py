@@ -6,7 +6,6 @@ import pandas as pd
 import requests
 import json
 from pathlib import Path
-from urllib.parse import quote_plus, unquote_plus
 
 # ------------------- Config -------------------
 MANILA = ZoneInfo("Asia/Manila")
@@ -171,7 +170,6 @@ def send_5min_warnings(field_timers):
     st.session_state.setdefault("warn_sent", {})
     now = now_manila()
 
-    # Field bosses
     for t in field_timers:
         spawn_dt = t.next_time
         remaining = (spawn_dt - now).total_seconds()
@@ -186,7 +184,6 @@ def send_5min_warnings(field_timers):
                 if send_discord_message(msg):
                     st.session_state.warn_sent[key] = True
 
-    # Weekly bosses
     for boss, times in weekly_boss_data:
         for sched in times:
             spawn_dt = get_next_weekly_spawn(sched)
@@ -312,7 +309,6 @@ def mark_boss_killed_by_name(boss_name: str):
 
     old_time_str = t.last_time.strftime("%Y-%m-%d %I:%M %p")
 
-    # keep minute precision (TimerEntry parser expects: "%Y-%m-%d %I:%M %p")
     now_dt = now_manila().replace(second=0, microsecond=0)
 
     t.last_time = now_dt
@@ -330,90 +326,60 @@ def mark_boss_killed_by_name(boss_name: str):
         f"🩸 **{t.name}** was killed by **{killer}** at **{now_dt.strftime('%I:%M %p')}** (Manila Time)"
     )
 
-# ------------------- Field Boss Table (HTML with borders + Killed Column) -------------------
+# ------------------- Field Boss Table (REAL buttons, no HTML links) -------------------
 def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
     is_admin = bool(st.session_state.get("auth", False))
 
-    # ✅ cleaner skull button: gray default → red hover, plus table polish
-    st.markdown("""
-    <style>
-      a.killbtn{
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        width:38px;
-        height:34px;
-        background:#e5e7eb;
-        color:#111827 !important;
-        text-decoration:none !important;
-        font-weight:900;
-        border-radius:10px;
-        border:1px solid #cbd5e1;
-        box-shadow: 0 1px 2px rgba(0,0,0,.12);
-      }
-      a.killbtn:hover{
-        background:#ff4d4f;
-        border-color:#ff4d4f;
-        color:#ffffff !important;
-        transform: translateY(-1px);
-      }
-      a.killbtn:active{
-        transform: translateY(0px);
-      }
-      table { font-size: 14px; }
-      th { background: #f3f4f6; }
-    </style>
-    """, unsafe_allow_html=True)
+    # Header
+    if is_admin:
+        h1, h2, h3, h4, h5, h6, h7 = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2, 0.7])
+    else:
+        h1, h2, h3, h4, h5, h6 = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2])
 
-    countdown_cells = []
-    killed_cells = []
+    h1.markdown("**Boss Name**")
+    h2.markdown("**Interval (min)**")
+    h3.markdown("**Last Spawn**")
+    h4.markdown("**Next Spawn Date**")
+    h5.markdown("**Next Spawn Time**")
+    h6.markdown("**Countdown**")
+    if is_admin:
+        h7.markdown("**Killed**")
 
+    st.divider()
+
+    # Rows
     for t in timers_sorted:
-        secs = t.countdown().total_seconds()
+        cd_td = t.countdown()
+        secs = cd_td.total_seconds()
 
-        # ✅ personal recommendation thresholds:
-        # red < 30 mins, orange < 2 hours, else green
-        if secs <= 1800:
-            color = "#ff4d4f"
-        elif secs <= 7200:
-            color = "#ffa500"
+        # Match weekly style: color only, not bold
+        if secs <= 60:
+            color = "red"
+        elif secs <= 300:
+            color = "orange"
         else:
-            color = "#00c853"
+            color = "green"
 
-        countdown_cells.append(
-            f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>"
-        )
+        cd_html = f"<span style='color:{color}'>{format_timedelta(cd_td)}</span>"
 
         if is_admin:
-            boss_q = quote_plus(t.name)  # safe for spaces/special chars
-            killed_cells.append(
-                f"<a class='killbtn' "
-                f"title='Mark as killed now' "
-                f"href='#' "
-                f"onclick=\""
-                f"if(confirm('Mark {t.name} as killed now?')){{"
-                f"  window.location.search='kill={boss_q}';"
-                f"}}"
-                f"return false;\">💀</a>"
-            )
+            c1, c2, c3, c4, c5, c6, c7 = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2, 0.7])
         else:
-            killed_cells.append("")
+            c1, c2, c3, c4, c5, c6 = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2])
 
-    data = {
-        "Boss Name": [t.name for t in timers_sorted],
-        "Interval (min)": [t.interval_minutes for t in timers_sorted],
-        "Last Spawn": [t.last_time.strftime("%m-%d-%Y | %H:%M") for t in timers_sorted],
-        "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
-        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
-        "Countdown": countdown_cells,
-    }
+        c1.write(t.name)
+        c2.write(t.interval_minutes)
+        c3.write(t.last_time.strftime("%m-%d-%Y | %H:%M"))
+        c4.write(t.next_time.strftime("%b %d, %Y (%a)"))
+        c5.write(t.next_time.strftime("%I:%M %p"))
+        c6.markdown(cd_html, unsafe_allow_html=True)
 
-    if is_admin:
-        data["Killed"] = killed_cells
-
-    df = pd.DataFrame(data)
-    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+        if is_admin:
+            if c7.button("💀", key=f"kill_{t.name}", help="Mark as killed now"):
+                mark_boss_killed_by_name(t.name)
+                st.success(f"✅ Saved: {t.name} killed now.")
+                st.rerun()
 
 # ------------------- Weekly Table -------------------
 def display_weekly_boss_table_newstyle():
@@ -465,30 +431,6 @@ timers = st.session_state.timers
 
 for t in timers:
     t.update_next()
-
-# ---- Handle HTML kill click via URL query param ----
-kill_target = ""
-try:
-    kill_target = st.query_params.get("kill", "")
-except Exception:
-    kill_target = st.experimental_get_query_params().get("kill", [""])[0]
-
-# ✅ decode safely (handles spaces etc.)
-if isinstance(kill_target, list):
-    kill_target = kill_target[0] if kill_target else ""
-kill_target = unquote_plus(kill_target or "")
-
-if st.session_state.page == "world" and st.session_state.auth and kill_target:
-    if any(t.name == kill_target for t in st.session_state.timers):
-        mark_boss_killed_by_name(kill_target)
-
-    # Clear param to avoid repeating on refresh/autorefresh
-    try:
-        st.query_params.clear()
-    except Exception:
-        st.experimental_set_query_params()
-
-    st.rerun()
 
 # ✅ Send Discord 5-min warnings ONLY on world page
 if st.session_state.page == "world":
@@ -635,5 +577,3 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
