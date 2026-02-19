@@ -14,12 +14,11 @@ DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 
 # ✅ Put these in .streamlit/secrets.toml instead of hardcoding
-# DISCORD_WEBHOOK_URL="..."  (REDACTED)
-# ADMIN_PASSWORD="..."       (optional to keep here, but better in secrets too)
 DISCORD_WEBHOOK_URL = st.secrets.get("DISCORD_WEBHOOK_URL", "")
 ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "bestgame")
 
 WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
+
 
 # ------------------- Discord -------------------
 def send_discord_message(message: str) -> bool:
@@ -31,6 +30,7 @@ def send_discord_message(message: str) -> bool:
         return 200 <= r.status_code < 300
     except Exception:
         return False
+
 
 # ------------------- Helpers -------------------
 def format_timedelta(td: timedelta) -> str:
@@ -44,8 +44,15 @@ def format_timedelta(td: timedelta) -> str:
         return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
     return f"{hours:02}:{minutes:02}:{seconds:02}"
 
+
 def now_manila() -> datetime:
     return datetime.now(tz=MANILA)
+
+
+def now_manila_floor_minute() -> datetime:
+    # set seconds/microseconds to zero so it matches your time-input precision
+    return now_manila().replace(second=0, microsecond=0)
+
 
 # ------------------- Default Boss Data -------------------
 default_boss_data = [
@@ -73,6 +80,7 @@ default_boss_data = [
     ("Supore", 3720, "2025-09-20 07:15 AM"),
 ]
 
+
 # ------------------- JSON Persistence -------------------
 def load_boss_data():
     if DATA_FILE.exists():
@@ -80,9 +88,11 @@ def load_boss_data():
             return json.load(f)
     return default_boss_data.copy()
 
+
 def save_boss_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
+
 
 # ------------------- Edit History (NO DISCORD) -------------------
 def log_edit(boss_name: str, old_time: str, new_time: str):
@@ -104,6 +114,7 @@ def log_edit(boss_name: str, old_time: str, new_time: str):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, indent=4)
 
+
 # ------------------- Timer Class -------------------
 class TimerEntry:
     def __init__(self, name: str, interval_minutes: int, last_time_str: str):
@@ -111,7 +122,9 @@ class TimerEntry:
         self.interval_minutes = int(interval_minutes)
         self.interval_seconds = self.interval_minutes * 60
 
-        self.last_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
+        self.last_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(
+            tzinfo=MANILA
+        )
         self.next_time = self.last_time + timedelta(seconds=self.interval_seconds)
 
     def update_next(self):
@@ -123,9 +136,11 @@ class TimerEntry:
     def countdown(self) -> timedelta:
         return self.next_time - now_manila()
 
+
 # ------------------- Build Timers -------------------
 def build_timers():
     return [TimerEntry(*row) for row in load_boss_data()]
+
 
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
@@ -145,6 +160,7 @@ weekly_boss_data = [
     ("Nevaeh (Kransia)", ["Sunday 22:00"]),
 ]
 
+
 def get_next_weekly_spawn(day_time: str) -> datetime:
     now = now_manila()
     day_time = " ".join(day_time.split())
@@ -152,8 +168,13 @@ def get_next_weekly_spawn(day_time: str) -> datetime:
     target_time = datetime.strptime(time_str, "%H:%M").time()
 
     weekday_map = {
-        "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
-        "Friday": 4, "Saturday": 5, "Sunday": 6,
+        "Monday": 0,
+        "Tuesday": 1,
+        "Wednesday": 2,
+        "Thursday": 3,
+        "Friday": 4,
+        "Saturday": 5,
+        "Sunday": 6,
     }
     target_weekday = weekday_map[day]
 
@@ -165,9 +186,11 @@ def get_next_weekly_spawn(day_time: str) -> datetime:
         spawn_dt += timedelta(days=7)
     return spawn_dt
 
+
 # ------------------- 5-minute warning logic -------------------
 def _warn_key(source: str, boss_name: str, spawn_dt: datetime) -> str:
     return f"{source}|{boss_name}|{spawn_dt.strftime('%Y-%m-%d %H:%M')}"
+
 
 def send_5min_warnings(field_timers):
     """
@@ -211,6 +234,7 @@ def send_5min_warnings(field_timers):
     # prevent unbounded growth
     if len(st.session_state.warn_sent) > 600:
         st.session_state.warn_sent = dict(list(st.session_state.warn_sent.items())[-500:])
+
 
 # ------------------- Fancy Next Boss Banner -------------------
 def next_boss_banner_combined(field_timers):
@@ -311,27 +335,100 @@ def next_boss_banner_combined(field_timers):
         unsafe_allow_html=True,
     )
 
+
+# ------------------- InstaKill Action -------------------
+def instakill_set_last_to_now(boss_name: str):
+    """Admin-only: set boss last_time = now (Manila), recompute next_time, save + history."""
+    if not st.session_state.get("auth"):
+        return
+
+    now_dt = now_manila_floor_minute()
+
+    # find timer by name
+    for i, t in enumerate(st.session_state.timers):
+        if t.name == boss_name:
+            old_time_str = t.last_time.strftime("%Y-%m-%d %I:%M %p")
+
+            st.session_state.timers[i].last_time = now_dt
+            st.session_state.timers[i].next_time = now_dt + timedelta(seconds=t.interval_seconds)
+
+            # persist
+            save_boss_data([
+                (x.name, x.interval_minutes, x.last_time.strftime("%Y-%m-%d %I:%M %p"))
+                for x in st.session_state.timers
+            ])
+
+            # log history
+            log_edit(boss_name, old_time_str, now_dt.strftime("%Y-%m-%d %I:%M %p"))
+
+            st.toast(f"💀 InstaKill: {boss_name} set to NOW", icon="💀")
+            st.rerun()
+            return
+
+
 # ------------------- Field Boss Table -------------------
 def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
-    countdown_cells = []
-    instakill_cells = []
+    # ✅ Center ALL table headers (titles) (this affects the Weekly table too)
+    st.markdown("""
+    <style>
+    table th {
+        text-align: center !important;
+        vertical-align: middle !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
+    # ---------------- Admin view (clickable skull) ----------------
+    if st.session_state.get("auth"):
+        # Header
+        header_cols = st.columns([2.2, 1.2, 2.2, 2.0, 1.6, 1.4, 0.9])
+        header_labels = ["Boss Name", "Interval (min)", "Last Spawn", "Next Spawn Date", "Next Spawn Time", "Countdown", "InstaKill"]
+        for c, label in zip(header_cols, header_labels):
+            c.markdown(f"<div style='text-align:center; font-weight:700;'>{label}</div>", unsafe_allow_html=True)
+
+        st.markdown("<hr style='margin:6px 0 10px 0;'>", unsafe_allow_html=True)
+
+        # Rows
+        for t in timers_sorted:
+            secs = t.countdown().total_seconds()
+            if secs <= 60:
+                color = "red"
+            elif secs <= 300:
+                color = "orange"
+            else:
+                color = "green"
+
+            row = st.columns([2.2, 1.2, 2.2, 2.0, 1.6, 1.4, 0.9])
+
+            row[0].markdown(f"<div style='text-align:center;'>{t.name}</div>", unsafe_allow_html=True)
+            row[1].markdown(f"<div style='text-align:center;'>{t.interval_minutes}</div>", unsafe_allow_html=True)
+            row[2].markdown(f"<div style='text-align:center;'>{t.last_time.strftime('%m-%d-%Y | %H:%M')}</div>", unsafe_allow_html=True)
+            row[3].markdown(f"<div style='text-align:center;'>{t.next_time.strftime('%b %d, %Y (%a)')}</div>", unsafe_allow_html=True)
+            row[4].markdown(f"<div style='text-align:center;'>{t.next_time.strftime('%I:%M %p')}</div>", unsafe_allow_html=True)
+            row[5].markdown(
+                f"<div style='text-align:center; color:{color}; font-weight:600;'>{format_timedelta(t.countdown())}</div>",
+                unsafe_allow_html=True
+            )
+
+            # 💀 Click = set last spawn to NOW
+            if row[6].button("💀", key=f"ik_{t.name}", help="Set Last Spawn to NOW"):
+                instakill_set_last_to_now(t.name)
+
+        return
+
+    # ---------------- Normal user view (HTML table, no InstaKill) ----------------
+    countdown_cells = []
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
-
         if secs <= 60:
             color = "red"
         elif secs <= 300:
             color = "orange"
         else:
             color = "green"
-
         countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
-
-        # ✅ InstaKill: skull on every row (only shown for admin below)
-        instakill_cells.append("<span class='skull-icon' title='InstaKill'>💀</span>")
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
@@ -342,44 +439,9 @@ def display_boss_table_sorted_newstyle(timers_list):
         "Countdown": countdown_cells,
     }
 
-    # ✅ InstaKill column ONLY appears when admin is logged in
-    if st.session_state.get("auth"):
-        data["InstaKill"] = instakill_cells
-
     df = pd.DataFrame(data)
-
-    # ✅ Center ALL column TITLES (headers) + keep InstaKill centered + Hover turns red
-    st.markdown("""
-    <style>
-
-    /* ✅ Center ALL table headers (titles) */
-    table th {
-        text-align: center !important;
-        vertical-align: middle !important;
-    }
-
-    /* ✅ If InstaKill exists, keep last column centered */
-    table td:last-child,
-    table th:last-child {
-        text-align: center;
-        vertical-align: middle;
-    }
-
-    .skull-icon{
-        cursor: default;
-        display: inline-block;
-        padding: 2px 6px;
-        border-radius: 6px;
-        line-height: 1.2;
-        transition: background-color .15s ease;
-    }
-    .skull-icon:hover{
-        background-color: red;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
 
 # ------------------- Weekly Table -------------------
 def display_weekly_boss_table_newstyle():
@@ -406,6 +468,7 @@ def display_weekly_boss_table_newstyle():
 
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
 
 # ------------------- Streamlit Setup -------------------
 st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
