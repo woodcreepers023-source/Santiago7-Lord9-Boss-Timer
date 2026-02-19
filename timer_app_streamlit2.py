@@ -327,29 +327,33 @@ def display_boss_table_sorted_newstyle(timers_list):
         else:
             color = "green"
 
-        countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
+        countdown_cells.append(
+            f"<div style='text-align:center; color:{color};'>{format_timedelta(t.countdown())}</div>"
+        )
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
-        "Interval (min)": [t.interval_minutes for t in timers_sorted],
+        "Interval (min)": [f"<div style='text-align:center;'>{t.interval_minutes}</div>" for t in timers_sorted],
         "Last Spawn": [t.last_time.strftime("%m-%d-%Y | %H:%M") for t in timers_sorted],
         "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
-        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
+        "Next Spawn Time": [
+            f"<div style='text-align:center;'>{t.next_time.strftime('%I:%M %p')}</div>"
+            for t in timers_sorted
+        ],
         "Countdown": countdown_cells,
     }
 
     df = pd.DataFrame(data)
 
-    # ✅ Center ALL column TITLES (headers)
     st.markdown("""
     <style>
-
-    /* ✅ Center ALL table headers (titles) */
     table th {
         text-align: center !important;
         vertical-align: middle !important;
     }
-
+    table td {
+        vertical-align: middle !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
