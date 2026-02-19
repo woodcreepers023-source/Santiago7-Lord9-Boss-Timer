@@ -6,6 +6,7 @@ import pandas as pd
 import requests
 import json
 from pathlib import Path
+from urllib.parse import quote_plus, unquote_plus
 
 # ------------------- Config -------------------
 MANILA = ZoneInfo("Asia/Manila")
@@ -20,7 +21,6 @@ WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
 
 # ------------------- Discord -------------------
 def send_discord_message(message: str) -> bool:
-    """Send a message to Discord via webhook. Returns True if sent."""
     if not DISCORD_WEBHOOK_URL:
         return False
     try:
@@ -107,7 +107,6 @@ class TimerEntry:
         self.name = name
         self.interval_minutes = int(interval_minutes)
         self.interval_seconds = self.interval_minutes * 60
-
         self.last_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
         self.next_time = self.last_time + timedelta(seconds=self.interval_seconds)
 
@@ -120,7 +119,6 @@ class TimerEntry:
     def countdown(self) -> timedelta:
         return self.next_time - now_manila()
 
-# ------------------- Build Timers -------------------
 def build_timers():
     return [TimerEntry(*row) for row in load_boss_data()]
 
@@ -148,10 +146,7 @@ def get_next_weekly_spawn(day_time: str) -> datetime:
     day, time_str = day_time.split(" ", 1)
     target_time = datetime.strptime(time_str, "%H:%M").time()
 
-    weekday_map = {
-        "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
-        "Friday": 4, "Saturday": 5, "Sunday": 6,
-    }
+    weekday_map = {"Monday":0,"Tuesday":1,"Wednesday":2,"Thursday":3,"Friday":4,"Saturday":5,"Sunday":6}
     target_weekday = weekday_map[day]
 
     days_ahead = (target_weekday - now.weekday()) % 7
@@ -171,15 +166,14 @@ def send_5min_warnings(field_timers):
     now = now_manila()
 
     for t in field_timers:
-        spawn_dt = t.next_time
-        remaining = (spawn_dt - now).total_seconds()
+        remaining = (t.next_time - now).total_seconds()
         if 0 < remaining <= WARNING_WINDOW_SECONDS:
-            key = _warn_key("FIELD", t.name, spawn_dt)
+            key = _warn_key("FIELD", t.name, t.next_time)
             if not st.session_state.warn_sent.get(key, False):
                 msg = (
                     f"⏳ **5-minute warning!**\n"
-                    f"**{t.name}** spawns at **{spawn_dt.strftime('%I:%M %p')}** (Manila)\n"
-                    f"Time left: `{format_timedelta(spawn_dt - now)}`"
+                    f"**{t.name}** spawns at **{t.next_time.strftime('%I:%M %p')}** (Manila)\n"
+                    f"Time left: `{format_timedelta(t.next_time - now)}`"
                 )
                 if send_discord_message(msg):
                     st.session_state.warn_sent[key] = True
@@ -199,9 +193,6 @@ def send_5min_warnings(field_timers):
                     if send_discord_message(msg):
                         st.session_state.warn_sent[key] = True
 
-    if len(st.session_state.warn_sent) > 600:
-        st.session_state.warn_sent = dict(list(st.session_state.warn_sent.items())[-500:])
-
 # ------------------- Next Boss Banner -------------------
 def next_boss_banner_combined(field_timers):
     if not field_timers:
@@ -212,9 +203,7 @@ def next_boss_banner_combined(field_timers):
     field_next = min(field_timers, key=lambda x: x.next_time)
     field_cd = field_next.next_time - now
 
-    weekly_best_name = None
-    weekly_best_time = None
-    weekly_best_cd = None
+    weekly_best_name, weekly_best_time, weekly_best_cd = None, None, None
     for boss, times in weekly_boss_data:
         for sched in times:
             spawn_dt = get_next_weekly_spawn(sched)
@@ -227,113 +216,87 @@ def next_boss_banner_combined(field_timers):
     chosen_name = field_next.name
     chosen_time = field_next.next_time
     chosen_cd = field_cd
+
     if weekly_best_cd is not None and weekly_best_cd < field_cd:
         chosen_name = weekly_best_name
         chosen_time = weekly_best_time
         chosen_cd = weekly_best_cd
 
     remaining = chosen_cd.total_seconds()
-    if remaining <= 60:
-        cd_color = "red"
-    elif remaining <= 300:
-        cd_color = "orange"
-    else:
-        cd_color = "limegreen"
-
-    time_only = chosen_time.strftime("%I:%M %p")
-    cd_str = format_timedelta(chosen_cd)
+    cd_color = "red" if remaining <= 60 else "orange" if remaining <= 300 else "limegreen"
 
     st.markdown(
         f"""
         <style>
-        .banner-container {{
-            display: flex;
-            justify-content: center;
-            margin: 20px 0 5px 0;
-        }}
+        .banner-container {{display:flex; justify-content:center; margin:20px 0 5px 0;}}
         .boss-banner {{
             background: linear-gradient(90deg, #0f172a, #1d4ed8, #16a34a);
-            padding: 14px 28px;
-            border-radius: 999px;
+            padding: 14px 28px; border-radius: 999px;
             box-shadow: 0 16px 40px rgba(15, 23, 42, 0.75);
-            color: #f9fafb;
-            display: inline-flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
+            color:#f9fafb; display:inline-flex; flex-direction:column; align-items:center; gap:4px;
         }}
-        .boss-banner-title {{
-            font-size: 28px;
-            font-weight: 800;
-            margin: 0;
-            letter-spacing: 0.03em;
-        }}
-        .boss-banner-row {{
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            font-size: 18px;
-        }}
-        .banner-chip {{
-            padding: 4px 12px;
-            border-radius: 999px;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.7);
-        }}
+        .boss-banner-title {{font-size:28px; font-weight:800; margin:0; letter-spacing:0.03em;}}
+        .boss-banner-row {{display:flex; align-items:center; gap:14px; font-size:18px;}}
+        .banner-chip {{padding:4px 12px; border-radius:999px; background:rgba(15,23,42,0.6); border:1px solid rgba(148,163,184,0.7);}}
         </style>
 
         <div class="banner-container">
-            <div class="boss-banner">
-                <h2 class="boss-banner-title">
-                    Next Boss: <strong>{chosen_name}</strong>
-                </h2>
-                <div class="boss-banner-row">
-                    <span class="banner-chip">
-                        🕒 <strong>{time_only}</strong>
-                    </span>
-                    <span class="banner-chip" style="color:{cd_color}; border-color:{cd_color};">
-                        ⏳ <strong>{cd_str}</strong>
-                    </span>
-                </div>
+          <div class="boss-banner">
+            <h2 class="boss-banner-title">Next Boss: <strong>{chosen_name}</strong></h2>
+            <div class="boss-banner-row">
+              <span class="banner-chip">🕒 <strong>{chosen_time.strftime("%I:%M %p")}</strong></span>
+              <span class="banner-chip" style="color:{cd_color}; border-color:{cd_color};">⏳ <strong>{format_timedelta(chosen_cd)}</strong></span>
             </div>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-# ------------------- 🔴 Kill Logic -------------------
+# ------------------- Kill Logic -------------------
 def mark_boss_killed_by_name(boss_name: str):
     timers = st.session_state.timers
     idx = next(i for i, t in enumerate(timers) if t.name == boss_name)
     t = timers[idx]
 
     old_time_str = t.last_time.strftime("%Y-%m-%d %I:%M %p")
-
     now_dt = now_manila().replace(second=0, microsecond=0)
+
     t.last_time = now_dt
     t.next_time = now_dt + timedelta(seconds=t.interval_seconds)
 
-    save_boss_data([
-        (x.name, x.interval_minutes, x.last_time.strftime("%Y-%m-%d %I:%M %p"))
-        for x in timers
-    ])
-
+    save_boss_data([(x.name, x.interval_minutes, x.last_time.strftime("%Y-%m-%d %I:%M %p")) for x in timers])
     log_edit(t.name, old_time_str, now_dt.strftime("%Y-%m-%d %I:%M %p"))
 
     killer = st.session_state.get("username", "Admin")
-    send_discord_message(
-        f"🩸 **{t.name}** was killed by **{killer}** at **{now_dt.strftime('%I:%M %p')}** (Manila Time)"
-    )
+    send_discord_message(f"🩸 **{t.name}** was killed by **{killer}** at **{now_dt.strftime('%I:%M %p')}** (Manila Time)")
 
-# ------------------- Field Boss Table (LOOKS like weekly + buttons below) -------------------
-def display_boss_table_sorted_newstyle(timers_list):
+# ------------------- Field Boss Table (REAL TABLE + KILL inside row) -------------------
+def display_field_table_with_kill(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
     is_admin = bool(st.session_state.get("auth", False))
 
+    st.markdown("""
+    <style>
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; }
+      th { background: #f3f4f6; font-weight: 700; }
+      a.killbtn{
+        display:inline-flex; align-items:center; justify-content:center;
+        width:34px; height:30px;
+        background:#e5e7eb; border:1px solid #cbd5e1;
+        border-radius:10px; text-decoration:none !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,.12);
+      }
+      a.killbtn:hover{ background:#ff4d4f; border-color:#ff4d4f; }
+      a.killbtn span{ font-size:16px; }
+    </style>
+    """, unsafe_allow_html=True)
+
     rows = []
     for t in timers_sorted:
-        cd_td = t.countdown()
-        secs = cd_td.total_seconds()
+        cd = t.countdown()
+        secs = cd.total_seconds()
         if secs <= 60:
             color = "red"
         elif secs <= 300:
@@ -341,58 +304,41 @@ def display_boss_table_sorted_newstyle(timers_list):
         else:
             color = "green"
 
-        rows.append({
+        row = {
             "Boss Name": t.name,
             "Interval (min)": t.interval_minutes,
             "Last Spawn": t.last_time.strftime("%m-%d-%Y | %H:%M"),
             "Next Spawn Date": t.next_time.strftime("%b %d, %Y (%a)"),
             "Next Spawn Time": t.next_time.strftime("%I:%M %p"),
-            "Countdown": f"<span style='color:{color}'>{format_timedelta(cd_td)}</span>",
-        })
+            "Countdown": f"<span style='color:{color}'>{format_timedelta(cd)}</span>",
+        }
+
+        if is_admin:
+            q = quote_plus(t.name)
+            row["Killed"] = f"<a class='killbtn' href='?kill={q}' title='Killed now'><span>💀</span></a>"
+
+        rows.append(row)
 
     df = pd.DataFrame(rows)
-
-    st.markdown("""
-    <style>
-      table { width: 100%; border-collapse: collapse; font-size: 14px; }
-      th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; }
-      th { background: #f3f4f6; font-weight: 700; }
-    </style>
-    """, unsafe_allow_html=True)
-
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
-
-    # Kill buttons below (reliable Streamlit buttons)
-    if is_admin:
-        st.caption("💀 Kill Switch (Admin only) — click to set Last Spawn = NOW and auto-save")
-        for t in timers_sorted:
-            c1, c2 = st.columns([4, 1])
-            c1.write(t.name)
-            if c2.button("💀", key=f"kill_{t.name}", help="Mark as killed now"):
-                mark_boss_killed_by_name(t.name)
-                st.success(f"✅ Saved: {t.name} killed now.")
-                st.rerun()
 
 # ------------------- Weekly Table -------------------
 def display_weekly_boss_table_newstyle():
     now = now_manila()
     upcoming = []
-
     for boss, times in weekly_boss_data:
         for sched in times:
             spawn_dt = get_next_weekly_spawn(sched)
-            countdown = spawn_dt - now
-            upcoming.append((boss, spawn_dt, countdown))
-
+            upcoming.append((boss, spawn_dt, spawn_dt - now))
     upcoming_sorted = sorted(upcoming, key=lambda x: x[1])
 
     data = {
-        "Boss Name": [row[0] for row in upcoming_sorted],
-        "Day": [row[1].strftime("%A") for row in upcoming_sorted],
-        "Time": [row[1].strftime("%I:%M %p") for row in upcoming_sorted],
+        "Boss Name": [r[0] for r in upcoming_sorted],
+        "Day": [r[1].strftime("%A") for r in upcoming_sorted],
+        "Time": [r[1].strftime("%I:%M %p") for r in upcoming_sorted],
         "Countdown": [
-            f"<span style='color:{'red' if row[2].total_seconds() <= 60 else 'orange' if row[2].total_seconds() <= 300 else 'green'}'>{format_timedelta(row[2])}</span>"
-            for row in upcoming_sorted
+            f"<span style='color:{'red' if r[2].total_seconds() <= 60 else 'orange' if r[2].total_seconds() <= 300 else 'green'}'>{format_timedelta(r[2])}</span>"
+            for r in upcoming_sorted
         ],
     }
 
@@ -424,6 +370,29 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
+# ------------------- Handle kill click via URL query param (same tab) -------------------
+kill_target = ""
+try:
+    kill_target = st.query_params.get("kill", "")
+except Exception:
+    kill_target = st.experimental_get_query_params().get("kill", [""])[0]
+
+if isinstance(kill_target, list):
+    kill_target = kill_target[0] if kill_target else ""
+kill_target = unquote_plus(kill_target or "")
+
+if st.session_state.page == "world" and st.session_state.auth and kill_target:
+    if any(t.name == kill_target for t in st.session_state.timers):
+        mark_boss_killed_by_name(kill_target)
+
+    # clear param (prevents re-trigger on refresh)
+    try:
+        st.query_params.clear()
+    except Exception:
+        st.experimental_set_query_params()
+
+    st.rerun()
+
 # ✅ Send Discord 5-min warnings ONLY on world page
 if st.session_state.page == "world":
     send_5min_warnings(timers)
@@ -453,7 +422,7 @@ if st.session_state.page == "world":
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        display_boss_table_sorted_newstyle(timers)
+        display_field_table_with_kill(timers)
     with col2:
         st.subheader("📅 Weekly Boss Spawns (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
