@@ -181,11 +181,9 @@ def next_boss_banner_combined(field_timers):
 
     now = datetime.now(tz=MANILA)
 
-    # Field next
     field_next = min(field_timers, key=lambda x: x.next_time)
     field_cd = field_next.next_time - now
 
-    # Weekly next
     weekly_best_name = None
     weekly_best_time = None
     weekly_best_cd = None
@@ -198,7 +196,6 @@ def next_boss_banner_combined(field_timers):
                 weekly_best_name = boss
                 weekly_best_time = spawn_dt
 
-    # Choose nearest overall
     chosen_name = field_next.name
     chosen_time = field_next.next_time
     chosen_cd = field_cd
@@ -354,10 +351,11 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
-# ------------------- WORLD PAGE TOP-RIGHT SMALL BUTTON (like your screenshot) -------------------
+# ------------------- WORLD PAGE: LEFT BUTTON + CENTER BANNER (same row) -------------------
 if st.session_state.page == "world":
-    spacer, topbtn = st.columns([8, 2])
-    with topbtn:
+    left_btn, mid_banner, right_space = st.columns([2, 6, 2])
+
+    with left_btn:
         if not st.session_state.auth:
             if st.button("🔐 Login in FB"):
                 goto("login")
@@ -365,8 +363,12 @@ if st.session_state.page == "world":
             if st.button("🛠️ Manage / Edit"):
                 goto("manage")
 
-# Banner
-next_boss_banner_combined(timers)
+    with mid_banner:
+        next_boss_banner_combined(timers)
+
+else:
+    # On other pages, just show the banner normally (optional)
+    next_boss_banner_combined(timers)
 
 st.divider()
 
