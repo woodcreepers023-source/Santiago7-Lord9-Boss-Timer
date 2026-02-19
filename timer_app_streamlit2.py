@@ -149,8 +149,13 @@ weekly_boss_data = [
     ("Milavy", ["Saturday 15:00"]),
     ("Ringor", ["Saturday 17:00"]),
     ("Roderick", ["Friday 19:00"]),
-    ("Auraq", ["Sunday 21:00", "Wednesday 21:00"]),
+    ("Auraq", ["Friday 22:00", "Wednesday 21:00"]),
     ("Chaiflock", ["Saturday 22:00"]),
+    ("Benji", ["Sunday 21:00"]),
+    ("Tumier", ["Sunday 19:00"]),
+    ("Icaruthia (Kransia)", ["Tuesday 21:00", "Friday 21:00"]),
+    ("Motti (Kransia)", ["Wednesday 19:00", "Saturday 19:00"]),
+    ("Nevaeh (Kransia)", ["Sunday 22:00"]),
 ]
 
 def get_next_weekly_spawn(day_time: str):
@@ -494,6 +499,7 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
