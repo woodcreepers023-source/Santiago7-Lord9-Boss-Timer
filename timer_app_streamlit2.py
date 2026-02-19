@@ -390,8 +390,12 @@ def display_boss_table_sorted_newstyle(timers_list):
             killed_cells.append(
                 f"<a class='killbtn' "
                 f"title='Mark as killed now' "
-                f"onclick=\"return confirm('Mark {t.name} as killed now?')\" "
-                f"href='?kill={boss_q}'>💀</a>"
+                f"href='#' "
+                f"onclick=\""
+                f"if(confirm('Mark {t.name} as killed now?')){{"
+                f"  window.location.search='kill={boss_q}';"
+                f"}}"
+                f"return false;\">💀</a>"
             )
         else:
             killed_cells.append("")
@@ -631,4 +635,5 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
