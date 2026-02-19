@@ -374,7 +374,7 @@ st.divider()
 
 # ------------------- WORLD PAGE CONTENT -------------------
 if st.session_state.page == "world":
-    st.subheader("🗡️ Field Boss Spawn Table (Auto-Sorted)")
+    st.subheader("⚔️ Field Boss Spawn Table (Sorted by Next Spawn)")
 
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -494,6 +494,7 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
