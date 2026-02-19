@@ -170,6 +170,7 @@ def send_5min_warnings(field_timers):
     st.session_state.setdefault("warn_sent", {})
     now = now_manila()
 
+    # Field bosses
     for t in field_timers:
         spawn_dt = t.next_time
         remaining = (spawn_dt - now).total_seconds()
@@ -184,6 +185,7 @@ def send_5min_warnings(field_timers):
                 if send_discord_message(msg):
                     st.session_state.warn_sent[key] = True
 
+    # Weekly bosses
     for boss, times in weekly_boss_data:
         for sched in times:
             spawn_dt = get_next_weekly_spawn(sched)
@@ -326,34 +328,43 @@ def mark_boss_killed_by_name(boss_name: str):
         f"🩸 **{t.name}** was killed by **{killer}** at **{now_dt.strftime('%I:%M %p')}** (Manila Time)"
     )
 
-# ------------------- Field Boss Table (REAL buttons, no HTML links) -------------------
+# ------------------- Field Boss Table (Borders + REAL buttons) -------------------
 def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
     is_admin = bool(st.session_state.get("auth", False))
 
+    st.markdown("""
+    <style>
+    .table-header {
+        font-weight: 700;
+        background-color: #f3f4f6;
+        padding: 8px 10px;
+        border: 1px solid #d1d5db;
+    }
+    .table-row {
+        padding: 6px 10px;
+        border: 1px solid #e5e7eb;
+        border-top: none;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # Header
     if is_admin:
-        h1, h2, h3, h4, h5, h6, h7 = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2, 0.7])
+        cols = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2, 0.8])
+        headers = ["Boss Name", "Interval (min)", "Last Spawn", "Next Spawn Date", "Next Spawn Time", "Countdown", "Killed"]
     else:
-        h1, h2, h3, h4, h5, h6 = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2])
+        cols = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2])
+        headers = ["Boss Name", "Interval (min)", "Last Spawn", "Next Spawn Date", "Next Spawn Time", "Countdown"]
 
-    h1.markdown("**Boss Name**")
-    h2.markdown("**Interval (min)**")
-    h3.markdown("**Last Spawn**")
-    h4.markdown("**Next Spawn Date**")
-    h5.markdown("**Next Spawn Time**")
-    h6.markdown("**Countdown**")
-    if is_admin:
-        h7.markdown("**Killed**")
-
-    st.divider()
+    for col, header in zip(cols, headers):
+        col.markdown(f"<div class='table-header'>{header}</div>", unsafe_allow_html=True)
 
     # Rows
     for t in timers_sorted:
         cd_td = t.countdown()
         secs = cd_td.total_seconds()
 
-        # Match weekly style: color only, not bold
         if secs <= 60:
             color = "red"
         elif secs <= 300:
@@ -364,22 +375,25 @@ def display_boss_table_sorted_newstyle(timers_list):
         cd_html = f"<span style='color:{color}'>{format_timedelta(cd_td)}</span>"
 
         if is_admin:
-            c1, c2, c3, c4, c5, c6, c7 = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2, 0.7])
+            cols = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2, 0.8])
         else:
-            c1, c2, c3, c4, c5, c6 = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2])
+            cols = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2])
 
-        c1.write(t.name)
-        c2.write(t.interval_minutes)
-        c3.write(t.last_time.strftime("%m-%d-%Y | %H:%M"))
-        c4.write(t.next_time.strftime("%b %d, %Y (%a)"))
-        c5.write(t.next_time.strftime("%I:%M %p"))
-        c6.markdown(cd_html, unsafe_allow_html=True)
+        cols[0].markdown(f"<div class='table-row'>{t.name}</div>", unsafe_allow_html=True)
+        cols[1].markdown(f"<div class='table-row'>{t.interval_minutes}</div>", unsafe_allow_html=True)
+        cols[2].markdown(f"<div class='table-row'>{t.last_time.strftime('%m-%d-%Y | %H:%M')}</div>", unsafe_allow_html=True)
+        cols[3].markdown(f"<div class='table-row'>{t.next_time.strftime('%b %d, %Y (%a)')}</div>", unsafe_allow_html=True)
+        cols[4].markdown(f"<div class='table-row'>{t.next_time.strftime('%I:%M %p')}</div>", unsafe_allow_html=True)
+        cols[5].markdown(f"<div class='table-row'>{cd_html}</div>", unsafe_allow_html=True)
 
         if is_admin:
-            if c7.button("💀", key=f"kill_{t.name}", help="Mark as killed now"):
-                mark_boss_killed_by_name(t.name)
-                st.success(f"✅ Saved: {t.name} killed now.")
-                st.rerun()
+            with cols[6]:
+                st.markdown("<div class='table-row'>", unsafe_allow_html=True)
+                if st.button("💀", key=f"kill_{t.name}", help="Mark as killed now"):
+                    mark_boss_killed_by_name(t.name)
+                    st.success(f"✅ Saved: {t.name} killed now.")
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------- Weekly Table -------------------
 def display_weekly_boss_table_newstyle():
