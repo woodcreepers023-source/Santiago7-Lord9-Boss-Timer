@@ -9,19 +9,28 @@ from pathlib import Path
 
 # ------------------- Config -------------------
 MANILA = ZoneInfo("Asia/Manila")
-DISCORD_WEBHOOK_URL = "YOUR_DISCORD_WEBHOOK_HERE"
+
+# ✅ Read webhook from Streamlit Secrets (safe)
+DISCORD_WEBHOOK_URL = st.secrets.get("https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv", "")
+
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 ADMIN_PASSWORD = "password"
 
+# 5-minute warning window (seconds)
+WARNING_WINDOW_SECONDS = 5 * 60
+
 # ------------------- Discord -------------------
-def send_discord_message(message: str):
-    if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "YOUR_DISCORD_WEBHOOK_HERE":
-        return
+def send_discord_message(message: str) -> bool:
+    """Send a message to Discord via webhook. Returns True if sent."""
+    if not DISCORD_WEBHOOK_URL:
+        return False
     try:
-        requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=5)
+        r = requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=8)
+        return 200 <= r.status_code < 300
     except Exception as e:
         print(f"Discord webhook error: {e}")
+        return False
 
 # ------------------- Default Boss Data -------------------
 default_boss_data = [
@@ -94,7 +103,7 @@ def log_edit(boss_name, old_time, new_time):
         f"Old: `{old_time}` → New: `{new_time}` (Manila time)"
     )
 
-# ------------------- Timer Class (OLD logic) -------------------
+# ------------------- Timer Class -------------------
 class TimerEntry:
     def __init__(self, name, interval_minutes, last_time_str):
         self.name = name
@@ -178,7 +187,58 @@ def get_next_weekly_spawn(day_time: str):
         spawn_dt += timedelta(days=7)
     return spawn_dt
 
-# ------------------- Fancy Next Boss Banner (NEW design) -------------------
+# ------------------- 5-minute warning logic -------------------
+def _warn_key(source: str, boss_name: str, spawn_dt: datetime) -> str:
+    # unique per spawn so it warns once per spawn cycle
+    return f"{source}|{boss_name}|{spawn_dt.strftime('%Y-%m-%d %H:%M')}"
+
+def send_5min_warnings(field_timers):
+    """
+    Sends ONE warning per boss per spawn when remaining time is within 5 minutes.
+    Runs safely on every rerun.
+    """
+    if "warn_sent" not in st.session_state:
+        st.session_state.warn_sent = {}
+
+    now = datetime.now(tz=MANILA)
+
+    # 1) Field bosses
+    for t in field_timers:
+        spawn_dt = t.next_time
+        remaining = (spawn_dt - now).total_seconds()
+        if 0 < remaining <= WARNING_WINDOW_SECONDS:
+            key = _warn_key("FIELD", t.name, spawn_dt)
+            if not st.session_state.warn_sent.get(key, False):
+                msg = (
+                    f"⏳ **5-minute warning!**\n"
+                    f"**{t.name}** spawns at **{spawn_dt.strftime('%I:%M %p')}** (Manila)\n"
+                    f"Time left: `{format_timedelta(spawn_dt - now)}`"
+                )
+                if send_discord_message(msg):
+                    st.session_state.warn_sent[key] = True
+
+    # 2) Weekly bosses
+    for boss, times in weekly_boss_data:
+        for sched in times:
+            spawn_dt = get_next_weekly_spawn(sched)
+            remaining = (spawn_dt - now).total_seconds()
+            if 0 < remaining <= WARNING_WINDOW_SECONDS:
+                key = _warn_key("WEEKLY", boss, spawn_dt)
+                if not st.session_state.warn_sent.get(key, False):
+                    msg = (
+                        f"⏳ **5-minute warning!**\n"
+                        f"**{boss}** spawns at **{spawn_dt.strftime('%I:%M %p')}** (Manila)\n"
+                        f"Time left: `{format_timedelta(spawn_dt - now)}`"
+                    )
+                    if send_discord_message(msg):
+                        st.session_state.warn_sent[key] = True
+
+    # Optional cleanup: prevent warn_sent from growing forever
+    # keep only last ~500 keys
+    if len(st.session_state.warn_sent) > 600:
+        st.session_state.warn_sent = dict(list(st.session_state.warn_sent.items())[-500:])
+
+# ------------------- Fancy Next Boss Banner -------------------
 def next_boss_banner_combined(field_timers):
     if not field_timers:
         st.warning("No timers loaded.")
@@ -278,7 +338,7 @@ def next_boss_banner_combined(field_timers):
         unsafe_allow_html=True,
     )
 
-# ------------------- Field Boss Table (NEW columns + emoji style) -------------------
+# ------------------- Field Boss Table -------------------
 def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
@@ -305,7 +365,7 @@ def display_boss_table_sorted_newstyle(timers_list):
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-# ------------------- Weekly Table (NEW style) -------------------
+# ------------------- Weekly Table -------------------
 def display_weekly_boss_table_newstyle():
     upcoming = []
     now = datetime.now(tz=MANILA)
@@ -356,6 +416,10 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
+# ✅ Send Discord 5-min warnings ONLY on world page (so manage/login won’t spam)
+if st.session_state.page == "world":
+    send_5min_warnings(timers)
+
 # ------------------- WORLD PAGE: LEFT BUTTON + CENTER BANNER (same row) -------------------
 if st.session_state.page == "world":
     left_btn, mid_banner, right_space = st.columns([2, 6, 2])
@@ -372,7 +436,6 @@ if st.session_state.page == "world":
         next_boss_banner_combined(timers)
 
 else:
-    # On other pages, just show the banner normally (optional)
     next_boss_banner_combined(timers)
 
 st.divider()
@@ -499,15 +562,3 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
-
-
-
-
-
-
-
-
-
-
