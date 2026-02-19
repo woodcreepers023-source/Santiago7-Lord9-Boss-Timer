@@ -14,15 +14,34 @@ DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 ADMIN_PASSWORD = "password"
 
-# ------------------- Collapse Sidebar Helper -------------------
+# ------------------- Sidebar Collapse Helpers (Streamlit Cloud safe) -------------------
 def collapse_sidebar():
-    # Tries to click Streamlit's collapse button
+    """
+    Streamlit Cloud: collapse by clicking the sidebar collapse button,
+    with retries and using both document + parent.document.
+    """
     st.markdown(
         """
         <script>
-        (function() {
-          const btn = parent.document.querySelector('[data-testid="stSidebarCollapseButton"]');
-          if (btn) btn.click();
+        (function () {
+          function getDocQuery(sel) {
+            return document.querySelector(sel) || (parent && parent.document && parent.document.querySelector(sel));
+          }
+
+          function isSidebarOpen() {
+            const sb = getDocQuery('[data-testid="stSidebar"]');
+            if (!sb) return false;
+            const r = sb.getBoundingClientRect();
+            return r.width > 0;
+          }
+
+          function tryCollapse() {
+            const btn = getDocQuery('[data-testid="stSidebarCollapseButton"]');
+            if (!btn) { setTimeout(tryCollapse, 80); return; }
+            if (isSidebarOpen()) btn.click();
+          }
+
+          setTimeout(tryCollapse, 120);
         })();
         </script>
         """,
@@ -164,6 +183,11 @@ st.set_page_config(
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
 st_autorefresh(interval=1000, key="timer_refresh")
 
+# ✅ Run collapse on the NEXT rerun (more reliable on Streamlit Cloud)
+if st.session_state.get("collapse_next_run", False):
+    st.session_state.collapse_next_run = False
+    collapse_sidebar()
+
 if "timers" not in st.session_state:
     st.session_state.timers = build_timers()
 timers = st.session_state.timers
@@ -172,7 +196,7 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
-# ------------------- SIDEBAR LOGIN (Option A) -------------------
+# ------------------- SIDEBAR LOGIN (Auto-fold after login/logout) -------------------
 if "auth" not in st.session_state:
     st.session_state.auth = False
 if "username" not in st.session_state:
@@ -191,10 +215,9 @@ with st.sidebar:
             if password_in == ADMIN_PASSWORD and username_in.strip():
                 st.session_state.auth = True
                 st.session_state.username = username_in.strip()
-                st.success(f"✅ Access granted for {st.session_state.username}")
 
-                # ✅ auto fold sidebar after login
-                collapse_sidebar()
+                # ✅ request collapse on next run
+                st.session_state.collapse_next_run = True
                 st.rerun()
             else:
                 st.error("❌ Invalid name or password.")
@@ -204,8 +227,8 @@ with st.sidebar:
             st.session_state.auth = False
             st.session_state.username = ""
 
-            # ✅ auto fold sidebar after logout
-            collapse_sidebar()
+            # ✅ request collapse on next run
+            st.session_state.collapse_next_run = True
             st.rerun()
 
 # ------------------- Weekly Boss Data -------------------
@@ -249,9 +272,11 @@ def next_boss_banner_combined(field_timers):
 
     now = datetime.now(tz=MANILA)
 
+    # Field next
     field_next = min(field_timers, key=lambda x: x.next_time)
     field_cd = field_next.next_time - now
 
+    # Weekly next
     weekly_best_name = None
     weekly_best_time = None
     weekly_best_cd = None
@@ -264,6 +289,7 @@ def next_boss_banner_combined(field_timers):
                 weekly_best_name = boss
                 weekly_best_time = spawn_dt
 
+    # Choose nearest overall
     chosen_name = field_next.name
     chosen_time = field_next.next_time
     chosen_cd = field_cd
