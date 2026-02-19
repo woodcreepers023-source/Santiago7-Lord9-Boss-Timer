@@ -10,15 +10,17 @@ from pathlib import Path
 # ------------------- Config -------------------
 MANILA = ZoneInfo("Asia/Manila")
 
-# ✅ TEMPORARY: hardcode webhook for testing (regenerate later)
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv"
-
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
-ADMIN_PASSWORD = "password"
 
-# 5-minute warning window (seconds)
-WARNING_WINDOW_SECONDS = 5 * 60
+# Prefer secrets (Streamlit Cloud), fallback to hardcoded for local testing
+DISCORD_WEBHOOK_URL = st.secrets.get(
+    "DISCORD_WEBHOOK_URL",
+    "https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv",
+)
+ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "password")
+
+WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
 
 # ------------------- Discord -------------------
 def send_discord_message(message: str) -> bool:
@@ -28,9 +30,23 @@ def send_discord_message(message: str) -> bool:
     try:
         r = requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=10)
         return 200 <= r.status_code < 300
-    except Exception as e:
-        print(f"Discord webhook error: {e}")
+    except Exception:
         return False
+
+# ------------------- Helpers -------------------
+def format_timedelta(td: timedelta) -> str:
+    total_seconds = int(td.total_seconds())
+    if total_seconds < 0:
+        return "00:00:00"
+    days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if days > 0:
+        return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+def now_manila() -> datetime:
+    return datetime.now(tz=MANILA)
 
 # ------------------- Default Boss Data -------------------
 default_boss_data = [
@@ -62,18 +78,15 @@ default_boss_data = [
 def load_boss_data():
     if DATA_FILE.exists():
         with open(DATA_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    else:
-        data = default_boss_data.copy()
-
-    return data
+            return json.load(f)
+    return default_boss_data.copy()
 
 def save_boss_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
 # ------------------- Edit History -------------------
-def log_edit(boss_name, old_time, new_time):
+def log_edit(boss_name: str, old_time: str, new_time: str):
     history = []
     if HISTORY_FILE.exists():
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
@@ -84,7 +97,7 @@ def log_edit(boss_name, old_time, new_time):
         "boss": boss_name,
         "old_time": old_time,
         "new_time": new_time,
-        "edited_at": datetime.now(tz=MANILA).strftime("%Y-%m-%d %I:%M %p"),
+        "edited_at": now_manila().strftime("%Y-%m-%d %I:%M %p"),
         "edited_by": edited_by,
     }
     history.append(entry)
@@ -99,49 +112,26 @@ def log_edit(boss_name, old_time, new_time):
 
 # ------------------- Timer Class -------------------
 class TimerEntry:
-    def __init__(self, name, interval_minutes, last_time_str):
+    def __init__(self, name: str, interval_minutes: int, last_time_str: str):
         self.name = name
         self.interval_minutes = int(interval_minutes)
-        self.interval = self.interval_minutes * 60  # seconds
-        parsed_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
-        self.last_time = parsed_time
-        self.next_time = self.last_time + timedelta(seconds=self.interval)
+        self.interval_seconds = self.interval_minutes * 60
+
+        self.last_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
+        self.next_time = self.last_time + timedelta(seconds=self.interval_seconds)
 
     def update_next(self):
-        now = datetime.now(tz=MANILA)
+        now = now_manila()
         while self.next_time < now:
             self.last_time = self.next_time
-            self.next_time = self.last_time + timedelta(seconds=self.interval)
+            self.next_time = self.last_time + timedelta(seconds=self.interval_seconds)
 
-    def countdown(self):
-        return self.next_time - datetime.now(tz=MANILA)
-
-    def format_countdown(self):
-        td = self.countdown()
-        total_seconds = int(td.total_seconds())
-        if total_seconds < 0:
-            return "00:00:00"
-        days, rem = divmod(total_seconds, 86400)
-        hours, rem = divmod(rem, 3600)
-        minutes, seconds = divmod(rem, 60)
-        if days > 0:
-            return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
-        return f"{hours:02}:{minutes:02}:{seconds:02}"
-
-def format_timedelta(td: timedelta) -> str:
-    total_seconds = int(td.total_seconds())
-    if total_seconds < 0:
-        return "00:00:00"
-    days, rem = divmod(total_seconds, 86400)
-    hours, rem = divmod(rem, 3600)
-    minutes, seconds = divmod(rem, 60)
-    if days > 0:
-        return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
-    return f"{hours:02}:{minutes:02}:{seconds:02}"
+    def countdown(self) -> timedelta:
+        return self.next_time - now_manila()
 
 # ------------------- Build Timers -------------------
 def build_timers():
-    return [TimerEntry(*data) for data in load_boss_data()]
+    return [TimerEntry(*row) for row in load_boss_data()]
 
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
@@ -161,8 +151,8 @@ weekly_boss_data = [
     ("Nevaeh (Kransia)", ["Sunday 22:00"]),
 ]
 
-def get_next_weekly_spawn(day_time: str):
-    now = datetime.now(tz=MANILA)
+def get_next_weekly_spawn(day_time: str) -> datetime:
+    now = now_manila()
     day_time = " ".join(day_time.split())
     day, time_str = day_time.split(" ", 1)
     target_time = datetime.strptime(time_str, "%H:%M").time()
@@ -188,10 +178,10 @@ def _warn_key(source: str, boss_name: str, spawn_dt: datetime) -> str:
 def send_5min_warnings(field_timers):
     """
     Sends ONE warning per boss per spawn when remaining time is within 5 minutes.
-    Note: This only runs when the app is actively running/rerunning (e.g. your World page is open).
+    Only runs while the app reruns (world page open).
     """
     st.session_state.setdefault("warn_sent", {})
-    now = datetime.now(tz=MANILA)
+    now = now_manila()
 
     # Field bosses
     for t in field_timers:
@@ -224,7 +214,7 @@ def send_5min_warnings(field_timers):
                     if send_discord_message(msg):
                         st.session_state.warn_sent[key] = True
 
-    # keep warn_sent from growing forever
+    # prevent unbounded growth
     if len(st.session_state.warn_sent) > 600:
         st.session_state.warn_sent = dict(list(st.session_state.warn_sent.items())[-500:])
 
@@ -234,8 +224,7 @@ def next_boss_banner_combined(field_timers):
         st.warning("No timers loaded.")
         return
 
-    now = datetime.now(tz=MANILA)
-
+    now = now_manila()
     field_next = min(field_timers, key=lambda x: x.next_time)
     field_cd = field_next.next_time - now
 
@@ -341,7 +330,7 @@ def display_boss_table_sorted_newstyle(timers_list):
             color = "orange"
         else:
             color = "green"
-        countdown_cells.append(f"<span style='color:{color}'>{t.format_countdown()}</span>")
+        countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
@@ -357,8 +346,8 @@ def display_boss_table_sorted_newstyle(timers_list):
 
 # ------------------- Weekly Table -------------------
 def display_weekly_boss_table_newstyle():
+    now = now_manila()
     upcoming = []
-    now = datetime.now(tz=MANILA)
 
     for boss, times in weekly_boss_data:
         for sched in times:
@@ -410,7 +399,7 @@ for t in timers:
 if st.session_state.page == "world":
     send_5min_warnings(timers)
 
-# ------------------- WORLD PAGE: LEFT BUTTON + CENTER BANNER (same row) -------------------
+# ------------------- WORLD PAGE: LEFT BUTTON + CENTER BANNER -------------------
 if st.session_state.page == "world":
     left_btn, mid_banner, right_space = st.columns([2, 6, 2])
 
@@ -439,7 +428,6 @@ if st.session_state.page == "world":
     with col2:
         st.subheader("📅 Weekly Boss Spawns (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
-
 
 # ------------------- LOGIN PAGE -------------------
 elif st.session_state.page == "login":
@@ -495,20 +483,20 @@ elif st.session_state.page == "manage":
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
                     value=timer.last_time.date(),
-                    key=f"{timer.name}_last_date"
+                    key=f"{timer.name}_last_date",
                 )
                 new_time = st.time_input(
                     f"{timer.name} Last Time",
                     value=timer.last_time.time(),
                     key=f"{timer.name}_last_time",
-                    step=60
+                    step=60,
                 )
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
 
                     updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
-                    updated_next_time = updated_last_time + timedelta(seconds=timer.interval)
+                    updated_next_time = updated_last_time + timedelta(seconds=timer.interval_seconds)
 
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
@@ -552,6 +540,3 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
-
-
