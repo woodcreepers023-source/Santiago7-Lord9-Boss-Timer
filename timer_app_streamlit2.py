@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -13,11 +14,9 @@ MANILA = ZoneInfo("Asia/Manila")
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 
-# ✅ Put these in .streamlit/secrets.toml instead of hardcoding
-# DISCORD_WEBHOOK_URL="..."  (REDACTED)
-# ADMIN_PASSWORD="..."       (optional to keep here, but better in secrets too)
-DISCORD_WEBHOOK_URL = st.secrets.get("DISCORD_WEBHOOK_URL", "")
-ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "bestgame")
+# ✅ No st.secrets (use environment variables instead)
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "bestgame")
 
 WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
 
@@ -28,8 +27,20 @@ def send_discord_message(message: str) -> bool:
         return False
     try:
         r = requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=10)
-        return 200 <= r.status_code < 300
-    except Exception:
+        ok = 200 <= r.status_code < 300
+
+        # Debug info (safe, does not reveal webhook)
+        if not ok:
+            st.warning(f"Discord webhook failed: HTTP {r.status_code}")
+            try:
+                st.code(r.text[:500])
+            except Exception:
+                pass
+
+        return ok
+    except Exception as e:
+        st.warning("Discord request exception:")
+        st.code(repr(e))
         return False
 
 # ------------------- Helpers -------------------
@@ -316,10 +327,8 @@ def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
     countdown_cells = []
-
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
-
         if secs <= 60:
             color = "red"
         elif secs <= 300:
@@ -336,10 +345,7 @@ def display_boss_table_sorted_newstyle(timers_list):
         "Interval (min)": [f"<div style='text-align:center;'>{t.interval_minutes}</div>" for t in timers_sorted],
         "Last Spawn": [t.last_time.strftime("%m-%d-%Y | %H:%M") for t in timers_sorted],
         "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
-        "Next Spawn Time": [
-            f"<div style='text-align:center;'>{t.next_time.strftime('%I:%M %p')}</div>"
-            for t in timers_sorted
-        ],
+        "Next Spawn Time": [f"<div style='text-align:center;'>{t.next_time.strftime('%I:%M %p')}</div>" for t in timers_sorted],
         "Countdown": countdown_cells,
     }
 
@@ -347,13 +353,8 @@ def display_boss_table_sorted_newstyle(timers_list):
 
     st.markdown("""
     <style>
-    table th {
-        text-align: center !important;
-        vertical-align: middle !important;
-    }
-    table td {
-        vertical-align: middle !important;
-    }
+    table th { text-align: center !important; vertical-align: middle !important; }
+    table td { vertical-align: middle !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -388,6 +389,13 @@ def display_weekly_boss_table_newstyle():
 # ------------------- Streamlit Setup -------------------
 st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
+
+# ✅ Quick diagnostics (does NOT reveal the webhook)
+with st.expander("🧰 Discord Diagnostics", expanded=False):
+    st.write("Webhook configured:", bool(DISCORD_WEBHOOK_URL))
+    if st.button("🧪 Test Discord Now"):
+        ok = send_discord_message("✅ Test message from Boss Timer app.")
+        st.write("Sent:", ok)
 
 # ------------------- Session defaults -------------------
 st.session_state.setdefault("auth", False)
