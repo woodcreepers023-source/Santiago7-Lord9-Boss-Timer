@@ -379,13 +379,13 @@ st.divider()
 
 # ------------------- WORLD PAGE CONTENT -------------------
 if st.session_state.page == "world":
-    st.subheader("🗡️ Field Boss Spawn Table (Auto-Sorted)")
+    st.subheader("🗡️ Field Boss Spawns (Sorted by Next Spawn)")
 
     col1, col2 = st.columns([2, 1])
     with col1:
         display_boss_table_sorted_newstyle(timers)
     with col2:
-        st.subheader("📅 Weekly Bosses (Auto-Sorted)")
+        st.subheader("📅 Weekly Boss Spawns (Sorted by Next Spawn)")
         display_weekly_boss_table_newstyle()
 
 # ------------------- LOGIN PAGE -------------------
@@ -499,6 +499,7 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
 
 
