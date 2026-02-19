@@ -12,7 +12,7 @@ MANILA = ZoneInfo("Asia/Manila")
 DISCORD_WEBHOOK_URL = "YOUR_DISCORD_WEBHOOK_HERE"
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
-ADMIN_PASSWORD = "bestgame"
+ADMIN_PASSWORD = "password"
 
 # ------------------- Discord -------------------
 def send_discord_message(message: str):
@@ -142,13 +142,7 @@ def build_timers():
 
 # ------------------- Streamlit Setup -------------------
 st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
-
-# Create a RIGHT panel like your screenshot
-main_col, right_col = st.columns([6.5, 2.0], gap="large")
-
-with main_col:
-    st.title("🛡️ Lord9 Santiago 7 Boss Timer")
-
+st.title("🛡️ Lord9 Santiago 7 Boss Timer")
 st_autorefresh(interval=1000, key="timer_refresh")
 
 if "timers" not in st.session_state:
@@ -159,33 +153,26 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
-# ------------------- RIGHT-SIDE LOGIN PANEL (small) -------------------
+# ------------------- SIDEBAR LOGIN (Option A) -------------------
 if "auth" not in st.session_state:
     st.session_state.auth = False
 if "username" not in st.session_state:
     st.session_state.username = ""
 
-with right_col:
-    st.markdown(
-        """
-        <div style="padding:12px;border:1px solid rgba(150,150,150,.35);border-radius:12px;">
-        """,
-        unsafe_allow_html=True,
-    )
-
+with st.sidebar:
     st.markdown("### 🔐 Login")
 
     if not st.session_state.auth:
-        with st.form("login_form_right"):
-            username_in = st.text_input("Name", key="login_username_right")
-            password_in = st.text_input("Password", type="password", key="login_password_right")
+        with st.form("login_form_sidebar"):
+            username_in = st.text_input("Name", key="login_username_sidebar")
+            password_in = st.text_input("Password", type="password", key="login_password_sidebar")
             login_clicked = st.form_submit_button("Login", use_container_width=True)
 
         if login_clicked:
             if password_in == ADMIN_PASSWORD and username_in.strip():
                 st.session_state.auth = True
                 st.session_state.username = username_in.strip()
-                st.success(f"✅ Admin: {st.session_state.username}")
+                st.success(f"✅ Access granted for {st.session_state.username}")
                 st.rerun()
             else:
                 st.error("❌ Invalid name or password.")
@@ -195,8 +182,6 @@ with right_col:
             st.session_state.auth = False
             st.session_state.username = ""
             st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
@@ -334,6 +319,8 @@ def next_boss_banner_combined(field_timers):
         unsafe_allow_html=True,
     )
 
+next_boss_banner_combined(timers)
+
 # ------------------- Field Boss Table (NEW columns + emoji style) -------------------
 def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
@@ -387,78 +374,74 @@ def display_weekly_boss_table_newstyle():
     df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-# ------------------- MAIN CONTENT (left) -------------------
-with main_col:
-    next_boss_banner_combined(timers)
+# ------------------- Tabs -------------------
+tabs = ["World Boss Spawn"]
+if st.session_state.auth:
+    tabs.append("Manage & Edit Timers")
+    tabs.append("Edit History")
+tab_selection = st.tabs(tabs)
 
-    # ------------------- Tabs -------------------
-    tabs = ["World Boss Spawn"]
-    if st.session_state.auth:
-        tabs.append("Manage & Edit Timers")
-        tabs.append("Edit History")
-    tab_selection = st.tabs(tabs)
+# Tab 1: World Boss Spawn
+with tab_selection[0]:
+    st.subheader("🗡️ Field Boss Spawn Table")
 
-    # Tab 1: World Boss Spawn
-    with tab_selection[0]:
-        st.subheader("🗡️ Field Boss Spawn Table")
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        display_boss_table_sorted_newstyle(timers)
+    with col2:
+        st.subheader("📅 Weekly Bosses (Auto-Sorted)")
+        display_weekly_boss_table_newstyle()
 
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            display_boss_table_sorted_newstyle(timers)
-        with col2:
-            st.subheader("📅 Weekly Bosses (Auto-Sorted)")
-            display_weekly_boss_table_newstyle()
+# Tab 2: Manage & Edit Timers (NO sync logic, simple old behavior)
+if st.session_state.auth:
+    with tab_selection[1]:
+        st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
-    # Tab 2: Manage & Edit Timers (NO sync logic, simple old behavior)
-    if st.session_state.auth:
-        with tab_selection[1]:
-            st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
+        for i, timer in enumerate(timers):
+            with st.expander(f"Edit {timer.name}", expanded=False):
+                new_date = st.date_input(
+                    f"{timer.name} Last Date",
+                    value=timer.last_time.date(),
+                    key=f"{timer.name}_last_date"
+                )
+                new_time = st.time_input(
+                    f"{timer.name} Last Time",
+                    value=timer.last_time.time(),
+                    key=f"{timer.name}_last_time",
+                    step=60
+                )
 
-            for i, timer in enumerate(timers):
-                with st.expander(f"Edit {timer.name}", expanded=False):
-                    new_date = st.date_input(
-                        f"{timer.name} Last Date",
-                        value=timer.last_time.date(),
-                        key=f"{timer.name}_last_date"
-                    )
-                    new_time = st.time_input(
-                        f"{timer.name} Last Time",
-                        value=timer.last_time.time(),
-                        key=f"{timer.name}_last_time",
-                        step=60
-                    )
+                if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
+                    old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
 
-                    if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
-                        old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
+                    updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
+                    updated_next_time = updated_last_time + timedelta(seconds=timer.interval)
 
-                        updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
-                        updated_next_time = updated_last_time + timedelta(seconds=timer.interval)
+                    st.session_state.timers[i].last_time = updated_last_time
+                    st.session_state.timers[i].next_time = updated_next_time
 
-                        st.session_state.timers[i].last_time = updated_last_time
-                        st.session_state.timers[i].next_time = updated_next_time
+                    save_boss_data([
+                        (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
+                        for t in st.session_state.timers
+                    ])
 
-                        save_boss_data([
-                            (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
-                            for t in st.session_state.timers
-                        ])
+                    log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
 
-                        log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
+                    st.success(f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}")
 
-                        st.success(f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}")
+# Tab 3: Edit History
+if st.session_state.auth:
+    with tab_selection[2]:
+        st.subheader("📜 Edit History")
 
-    # Tab 3: Edit History
-    if st.session_state.auth:
-        with tab_selection[2]:
-            st.subheader("📜 Edit History")
+        if HISTORY_FILE.exists():
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                history = json.load(f)
 
-            if HISTORY_FILE.exists():
-                with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                    history = json.load(f)
-
-                if history:
-                    df_history = pd.DataFrame(history).sort_values("edited_at", ascending=False)
-                    st.dataframe(df_history, use_container_width=True)
-                else:
-                    st.info("No edits yet.")
+            if history:
+                df_history = pd.DataFrame(history).sort_values("edited_at", ascending=False)
+                st.dataframe(df_history, use_container_width=True)
             else:
-                st.info("No edit history yet.")
+                st.info("No edits yet.")
+        else:
+            st.info("No edit history yet.")
