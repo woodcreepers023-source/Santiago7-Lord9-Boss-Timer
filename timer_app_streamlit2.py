@@ -13,9 +13,11 @@ MANILA = ZoneInfo("Asia/Manila")
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 
-# ✅ Use secrets only (NO hardcoded webhook fallback)
-DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv"
-ADMIN_PASSWORD="bestgame"
+# ✅ Put these in .streamlit/secrets.toml instead of hardcoding
+# DISCORD_WEBHOOK_URL="..."  (REDACTED)
+# ADMIN_PASSWORD="..."       (optional to keep here, but better in secrets too)
+DISCORD_WEBHOOK_URL = st.secrets.get("DISCORD_WEBHOOK_URL", "")
+ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "bestgame")
 
 WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
 
@@ -319,7 +321,6 @@ def display_boss_table_sorted_newstyle(timers_list):
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
 
-        # Countdown color
         if secs <= 60:
             color = "red"
         elif secs <= 300:
@@ -327,16 +328,11 @@ def display_boss_table_sorted_newstyle(timers_list):
         else:
             color = "green"
 
-        countdown_cells.append(
-            f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>"
-        )
+        countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
 
-        # InstaKill column logic
-        # ✅ READY if within 5 minutes
+        # ✅ InstaKill: skull only (shows when within 5 minutes)
         if 0 <= secs <= 300:
-            instakill_cells.append("<span style='color:orange; font-weight:700'>⚔️ READY</span>")
-        elif secs < 0:
-            instakill_cells.append("<span style='color:red; font-weight:800'>🔥 UP</span>")
+            instakill_cells.append("<span class='skull-icon' title='InstaKill Window'>💀</span>")
         else:
             instakill_cells.append("")
 
@@ -347,10 +343,28 @@ def display_boss_table_sorted_newstyle(timers_list):
         "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
         "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
         "Countdown": countdown_cells,
-        "InstaKill": instakill_cells,  # ✅ new column
+        "InstaKill": instakill_cells,  # ✅ NEW COLUMN
     }
 
     df = pd.DataFrame(data)
+
+    # ✅ Hover effect: background turns red
+    st.markdown("""
+    <style>
+    .skull-icon{
+        cursor: default;
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 6px;
+        line-height: 1.2;
+        transition: background-color .15s ease;
+    }
+    .skull-icon:hover{
+        background-color: red;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 # ------------------- Weekly Table -------------------
