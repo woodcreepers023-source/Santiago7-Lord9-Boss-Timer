@@ -6,7 +6,6 @@ import pandas as pd
 import requests
 import json
 from pathlib import Path
-from urllib.parse import quote_plus, unquote_plus
 
 # ------------------- Config -------------------
 MANILA = ZoneInfo("Asia/Manila")
@@ -14,8 +13,9 @@ MANILA = ZoneInfo("Asia/Manila")
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv"
-ADMIN_PASSWORD = "bestgame"
+# ✅ Use secrets only (NO hardcoded webhook fallback)
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv"
+ADMIN_PASSWORD="bestgame"
 
 WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
 
@@ -82,7 +82,7 @@ def save_boss_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
-# ------------------- Edit History -------------------
+# ------------------- Edit History (NO DISCORD) -------------------
 def log_edit(boss_name: str, old_time: str, new_time: str):
     history = []
     if HISTORY_FILE.exists():
@@ -108,6 +108,7 @@ class TimerEntry:
         self.name = name
         self.interval_minutes = int(interval_minutes)
         self.interval_seconds = self.interval_minutes * 60
+
         self.last_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
         self.next_time = self.last_time + timedelta(seconds=self.interval_seconds)
 
@@ -120,6 +121,7 @@ class TimerEntry:
     def countdown(self) -> timedelta:
         return self.next_time - now_manila()
 
+# ------------------- Build Timers -------------------
 def build_timers():
     return [TimerEntry(*row) for row in load_boss_data()]
 
@@ -147,7 +149,10 @@ def get_next_weekly_spawn(day_time: str) -> datetime:
     day, time_str = day_time.split(" ", 1)
     target_time = datetime.strptime(time_str, "%H:%M").time()
 
-    weekday_map = {"Monday":0,"Tuesday":1,"Wednesday":2,"Thursday":3,"Friday":4,"Saturday":5,"Sunday":6}
+    weekday_map = {
+        "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
+        "Friday": 4, "Saturday": 5, "Sunday": 6,
+    }
     target_weekday = weekday_map[day]
 
     days_ahead = (target_weekday - now.weekday()) % 7
@@ -163,9 +168,14 @@ def _warn_key(source: str, boss_name: str, spawn_dt: datetime) -> str:
     return f"{source}|{boss_name}|{spawn_dt.strftime('%Y-%m-%d %H:%M')}"
 
 def send_5min_warnings(field_timers):
+    """
+    Sends ONE warning per boss per spawn when remaining time is within 5 minutes.
+    Only runs while the app reruns (world page open).
+    """
     st.session_state.setdefault("warn_sent", {})
     now = now_manila()
 
+    # Field bosses
     for t in field_timers:
         spawn_dt = t.next_time
         remaining = (spawn_dt - now).total_seconds()
@@ -180,6 +190,7 @@ def send_5min_warnings(field_timers):
                 if send_discord_message(msg):
                     st.session_state.warn_sent[key] = True
 
+    # Weekly bosses
     for boss, times in weekly_boss_data:
         for sched in times:
             spawn_dt = get_next_weekly_spawn(sched)
@@ -195,6 +206,7 @@ def send_5min_warnings(field_timers):
                     if send_discord_message(msg):
                         st.session_state.warn_sent[key] = True
 
+    # prevent unbounded growth
     if len(st.session_state.warn_sent) > 600:
         st.session_state.warn_sent = dict(list(st.session_state.warn_sent.items())[-500:])
 
@@ -242,17 +254,37 @@ def next_boss_banner_combined(field_timers):
     st.markdown(
         f"""
         <style>
-        .banner-container {{ display:flex; justify-content:center; margin:20px 0 5px 0; }}
+        .banner-container {{
+            display: flex;
+            justify-content: center;
+            margin: 20px 0 5px 0;
+        }}
         .boss-banner {{
             background: linear-gradient(90deg, #0f172a, #1d4ed8, #16a34a);
-            padding: 14px 28px; border-radius: 999px;
+            padding: 14px 28px;
+            border-radius: 999px;
             box-shadow: 0 16px 40px rgba(15, 23, 42, 0.75);
-            color: #f9fafb; display:inline-flex; flex-direction:column; align-items:center; gap:4px;
+            color: #f9fafb;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
         }}
-        .boss-banner-title {{ font-size: 28px; font-weight: 800; margin: 0; letter-spacing: 0.03em; }}
-        .boss-banner-row {{ display:flex; align-items:center; gap:14px; font-size:18px; }}
+        .boss-banner-title {{
+            font-size: 28px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: 0.03em;
+        }}
+        .boss-banner-row {{
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 18px;
+        }}
         .banner-chip {{
-            padding: 4px 12px; border-radius: 999px;
+            padding: 4px 12px;
+            border-radius: 999px;
             background: rgba(15, 23, 42, 0.6);
             border: 1px solid rgba(148, 163, 184, 0.7);
         }}
@@ -260,10 +292,16 @@ def next_boss_banner_combined(field_timers):
 
         <div class="banner-container">
             <div class="boss-banner">
-                <h2 class="boss-banner-title">Next Boss: <strong>{chosen_name}</strong></h2>
+                <h2 class="boss-banner-title">
+                    Next Boss: <strong>{chosen_name}</strong>
+                </h2>
                 <div class="boss-banner-row">
-                    <span class="banner-chip">🕒 <strong>{time_only}</strong></span>
-                    <span class="banner-chip" style="color:{cd_color}; border-color:{cd_color};">⏳ <strong>{cd_str}</strong></span>
+                    <span class="banner-chip">
+                        🕒 <strong>{time_only}</strong>
+                    </span>
+                    <span class="banner-chip" style="color:{cd_color}; border-color:{cd_color};">
+                        ⏳ <strong>{cd_str}</strong>
+                    </span>
                 </div>
             </div>
         </div>
@@ -271,62 +309,11 @@ def next_boss_banner_combined(field_timers):
         unsafe_allow_html=True,
     )
 
-# ------------------- 🔴 Kill Logic -------------------
-def mark_boss_killed_by_name(boss_name: str):
-    timers = st.session_state.timers
-    idx = next(i for i, t in enumerate(timers) if t.name == boss_name)
-    t = timers[idx]
-
-    old_time_str = t.last_time.strftime("%Y-%m-%d %I:%M %p")
-
-    now_dt = now_manila().replace(second=0, microsecond=0)
-    t.last_time = now_dt
-    t.next_time = now_dt + timedelta(seconds=t.interval_seconds)
-
-    save_boss_data([
-        (x.name, x.interval_minutes, x.last_time.strftime("%Y-%m-%d %I:%M %p"))
-        for x in timers
-    ])
-
-    log_edit(t.name, old_time_str, now_dt.strftime("%Y-%m-%d %I:%M %p"))
-
-    killer = st.session_state.get("username", "Admin")
-    send_discord_message(
-        f"🩸 **{t.name}** was killed by **{killer}** at **{now_dt.strftime('%I:%M %p')}** (Manila Time)"
-    )
-
-# ------------------- Field Boss Table (WITH Killed column) -------------------
+# ------------------- Field Boss Table -------------------
 def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
-    is_admin = bool(st.session_state.get("auth", False))
 
-    # keep borders + add skull button style
-    st.markdown("""
-    <style>
-      table { width: 100%; border-collapse: collapse; font-size: 14px; }
-      th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; }
-      th { background: #f3f4f6; font-weight: 700; }
-      a.killbtn{
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        width:34px;
-        height:30px;
-        background:#e5e7eb;
-        border:1px solid #cbd5e1;
-        border-radius:10px;
-        text-decoration:none !important;
-        box-shadow: 0 1px 2px rgba(0,0,0,.12);
-      }
-      a.killbtn:hover{
-        background:#ff4d4f;
-        border-color:#ff4d4f;
-      }
-      a.killbtn span{ font-size:16px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-    rows = []
+    countdown_cells = []
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
         if secs <= 60:
@@ -335,23 +322,18 @@ def display_boss_table_sorted_newstyle(timers_list):
             color = "orange"
         else:
             color = "green"
+        countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
 
-        row = {
-            "Boss Name": t.name,
-            "Interval (min)": t.interval_minutes,
-            "Last Spawn": t.last_time.strftime("%m-%d-%Y | %H:%M"),
-            "Next Spawn Date": t.next_time.strftime("%b %d, %Y (%a)"),
-            "Next Spawn Time": t.next_time.strftime("%I:%M %p"),
-            "Countdown": f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>",
-        }
+    data = {
+        "Boss Name": [t.name for t in timers_sorted],
+        "Interval (min)": [t.interval_minutes for t in timers_sorted],
+        "Last Spawn": [t.last_time.strftime("%m-%d-%Y | %H:%M") for t in timers_sorted],
+        "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
+        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
+        "Countdown": countdown_cells,
+    }
 
-        if is_admin:
-            q = quote_plus(t.name)
-            row["Killed"] = f"<a class='killbtn' href='?kill={q}' title='Killed now'><span>💀</span></a>"
-
-        rows.append(row)
-
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(data)
     st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 # ------------------- Weekly Table -------------------
@@ -404,29 +386,6 @@ timers = st.session_state.timers
 
 for t in timers:
     t.update_next()
-
-# ------------------- Handle kill click via URL query param -------------------
-kill_target = ""
-try:
-    kill_target = st.query_params.get("kill", "")
-except Exception:
-    kill_target = st.experimental_get_query_params().get("kill", [""])[0]
-
-if isinstance(kill_target, list):
-    kill_target = kill_target[0] if kill_target else ""
-kill_target = unquote_plus(kill_target or "")
-
-if st.session_state.page == "world" and st.session_state.auth and kill_target:
-    if any(t.name == kill_target for t in st.session_state.timers):
-        mark_boss_killed_by_name(kill_target)
-
-    # Clear param to avoid repeating on refresh/autorefresh
-    try:
-        st.query_params.clear()
-    except Exception:
-        st.experimental_set_query_params()
-
-    st.rerun()
 
 # ✅ Send Discord 5-min warnings ONLY on world page
 if st.session_state.page == "world":
@@ -540,10 +499,6 @@ elif st.session_state.page == "manage":
                     ])
 
                     log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
-                    send_discord_message(
-                        f"📝 **{timer.name}** updated by **{st.session_state.username}** "
-                        f"to **{updated_last_time.strftime('%I:%M %p')}** (Manila)"
-                    )
 
                     st.success(f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}")
 
