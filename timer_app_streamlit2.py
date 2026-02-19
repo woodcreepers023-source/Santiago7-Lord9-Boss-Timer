@@ -345,9 +345,18 @@ def display_boss_table_sorted_newstyle(timers_list):
 
     df = pd.DataFrame(data)
 
-    # ✅ Center InstaKill column + Hover turns red
+    # ✅ Center ALL column TITLES (headers) + keep InstaKill centered + Hover turns red
+    # This CSS will also affect the Weekly table because it is also a <table>.
     st.markdown("""
     <style>
+
+    /* ✅ Center ALL table headers (titles) */
+    table th {
+        text-align: center !important;
+        vertical-align: middle !important;
+    }
+
+    /* ✅ Keep InstaKill column centered */
     table td:last-child,
     table th:last-child {
         text-align: center;
