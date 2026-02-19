@@ -204,7 +204,7 @@ def send_5min_warnings(field_timers):
     if len(st.session_state.warn_sent) > 600:
         st.session_state.warn_sent = dict(list(st.session_state.warn_sent.items())[-500:])
 
-# ------------------- Fancy Next Boss Banner -------------------
+# ------------------- Next Boss Banner -------------------
 def next_boss_banner_combined(field_timers):
     if not field_timers:
         st.warning("No timers loaded.")
@@ -303,7 +303,7 @@ def next_boss_banner_combined(field_timers):
         unsafe_allow_html=True,
     )
 
-# ------------------- 🔴 Kill action -------------------
+# ------------------- 🔴 Kill Logic -------------------
 def mark_boss_killed_by_name(boss_name: str):
     timers = st.session_state.timers
     idx = next(i for i, t in enumerate(timers) if t.name == boss_name)
@@ -311,8 +311,9 @@ def mark_boss_killed_by_name(boss_name: str):
 
     old_time_str = t.last_time.strftime("%Y-%m-%d %I:%M %p")
 
-    # Keep minute precision (your TimerEntry parser requires this format)
+    # keep minute precision (TimerEntry parser expects: "%Y-%m-%d %I:%M %p")
     now_dt = now_manila().replace(second=0, microsecond=0)
+
     t.last_time = now_dt
     t.next_time = now_dt + timedelta(seconds=t.interval_seconds)
 
@@ -328,58 +329,33 @@ def mark_boss_killed_by_name(boss_name: str):
         f"🩸 **{t.name}** was killed by **{killer}** at **{now_dt.strftime('%I:%M %p')}** (Manila Time)"
     )
 
-    st.rerun()
-
-# ------------------- Field Boss Table (BORDERED LOOK + REAL BUTTONS) -------------------
-def display_boss_table_sorted_bordered_with_killed(timers_list):
+# ------------------- Field Boss Table (HTML with borders + Killed Column) -------------------
+def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
     is_admin = bool(st.session_state.get("auth", False))
 
-    # Borders + grid look
+    # red "button" style for the HTML link
     st.markdown("""
     <style>
-      .tblwrap { border: 1px solid rgba(0,0,0,0.15); border-radius: 6px; overflow: hidden; }
-      .tblhead, .tblrow { display: grid; align-items: center; }
-      .tblhead { background: rgba(0,0,0,0.03); font-weight: 800; }
-      .tblrow { border-top: 1px solid rgba(0,0,0,0.12); }
-      .cell { padding: 10px 12px; border-right: 1px solid rgba(0,0,0,0.10); }
-      .cell:last-child { border-right: none; }
-      .mono { font-variant-numeric: tabular-nums; }
-
-      /* Make primary buttons RED */
-      button[kind="primary"]{
-        background-color:#ff2b2b !important;
-        border:1px solid #ff2b2b !important;
-        color:white !important;
-        font-weight:800 !important;
+      a.killbtn{
+        display:inline-block;
+        background:#ff2b2b;
+        color:#fff !important;
+        text-decoration:none !important;
+        font-weight:800;
+        padding:6px 12px;
+        border-radius:8px;
       }
-      button[kind="primary"]:hover{
-        background-color:#cc0000 !important;
-        border:1px solid #cc0000 !important;
-        color:white !important;
+      a.killbtn:hover{
+        background:#cc0000;
+        color:#fff !important;
       }
     </style>
     """, unsafe_allow_html=True)
 
-    # Grid columns (with/without killed)
-    if is_admin:
-        grid = "2.0fr 1.0fr 2.2fr 2.2fr 1.5fr 1.4fr 1.2fr"
-    else:
-        grid = "2.0fr 1.0fr 2.2fr 2.2fr 1.5fr 1.4fr"
+    countdown_cells = []
+    killed_cells = []
 
-    st.markdown(f"<div class='tblwrap'>", unsafe_allow_html=True)
-
-    # Header
-    headers = ["Boss Name", "Interval (min)", "Last Spawn", "Next Spawn Date", "Next Spawn Time", "Countdown"]
-    if is_admin:
-        headers.append("Killed")
-
-    st.markdown(f"<div class='tblhead' style='grid-template-columns:{grid};'>", unsafe_allow_html=True)
-    for h in headers:
-        st.markdown(f"<div class='cell'>{h}</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Rows
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
         if secs <= 60:
@@ -389,33 +365,30 @@ def display_boss_table_sorted_bordered_with_killed(timers_list):
         else:
             color = "green"
 
-        cd_html = f"<span style='color:{color}; font-weight:800' class='mono'>{format_timedelta(t.countdown())}</span>"
-
-        st.markdown(f"<div class='tblrow' style='grid-template-columns:{grid};'>", unsafe_allow_html=True)
-
-        st.markdown(f"<div class='cell'>{t.name}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='cell mono'>{t.interval_minutes}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='cell mono'>{t.last_time.strftime('%m-%d-%Y | %H:%M')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='cell'>{t.next_time.strftime('%b %d, %Y (%a)')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='cell mono'>{t.next_time.strftime('%I:%M %p')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='cell'>{cd_html}</div>", unsafe_allow_html=True)
+        countdown_cells.append(
+            f"<span style='color:{color}; font-weight:800'>{format_timedelta(t.countdown())}</span>"
+        )
 
         if is_admin:
-            # Put the button in the last cell using a Streamlit placeholder
-            btn_col = st.container()
-            # close row div first so Streamlit can render button after (Streamlit can't render inside raw HTML div cleanly)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            # Render the button aligned under the "Killed" column using columns
-            # (This keeps perfect borders + real button)
-            c = st.columns([2.0, 1.0, 2.2, 2.2, 1.5, 1.4, 1.2])
-            with c[6]:
-                if st.button("🔴 KILLED NOW", key=f"kill_{t.name}", type="primary"):
-                    mark_boss_killed_by_name(t.name)
+            # clickable HTML link (works inside df.to_html)
+            killed_cells.append(f"<a class='killbtn' href='?kill={t.name}'>🔴 KILLED NOW</a>")
         else:
-            st.markdown("</div>", unsafe_allow_html=True)
+            killed_cells.append("")
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    data = {
+        "Boss Name": [t.name for t in timers_sorted],
+        "Interval (min)": [t.interval_minutes for t in timers_sorted],
+        "Last Spawn": [t.last_time.strftime("%m-%d-%Y | %H:%M") for t in timers_sorted],
+        "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
+        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
+        "Countdown": countdown_cells,
+    }
+
+    if is_admin:
+        data["Killed"] = killed_cells
+
+    df = pd.DataFrame(data)
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
 # ------------------- Weekly Table -------------------
 def display_weekly_boss_table_newstyle():
@@ -468,6 +441,26 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
+# ---- Handle HTML KILLED NOW click via URL query param ----
+# Clicking the table link sets ?kill=BossName
+kill_target = ""
+try:
+    kill_target = st.query_params.get("kill", "")
+except Exception:
+    kill_target = st.experimental_get_query_params().get("kill", [""])[0]
+
+if st.session_state.page == "world" and st.session_state.auth and kill_target:
+    if any(t.name == kill_target for t in st.session_state.timers):
+        mark_boss_killed_by_name(kill_target)
+
+    # Clear param to avoid repeating on refresh/autorefresh
+    try:
+        st.query_params.clear()
+    except Exception:
+        st.experimental_set_query_params()
+
+    st.rerun()
+
 # ✅ Send Discord 5-min warnings ONLY on world page
 if st.session_state.page == "world":
     send_5min_warnings(timers)
@@ -497,8 +490,7 @@ if st.session_state.page == "world":
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        display_boss_table_sorted_bordered_with_killed(timers)
-
+        display_boss_table_sorted_newstyle(timers)
     with col2:
         st.subheader("📅 Weekly Boss Spawns (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
