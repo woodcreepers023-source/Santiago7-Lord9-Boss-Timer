@@ -365,6 +365,10 @@ with left_btn:
         if st.button("🛠️ Manage / Edit"):
             goto("manage")
 
+    else:
+        if st.button("🛠️ Manage / Edit"):
+            goto("manage")
+
     with mid_banner:
         next_boss_banner_combined(timers)
 
@@ -496,4 +500,5 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
