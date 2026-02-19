@@ -10,8 +10,8 @@ from pathlib import Path
 # ------------------- Config -------------------
 MANILA = ZoneInfo("Asia/Manila")
 
-# ✅ Read webhook from Streamlit Secrets (safe)
-DISCORD_WEBHOOK_URL = st.secrets.get("https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv", "")
+# ✅ TEMPORARY: hardcode webhook for testing (regenerate later)
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv"
 
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
@@ -26,7 +26,7 @@ def send_discord_message(message: str) -> bool:
     if not DISCORD_WEBHOOK_URL:
         return False
     try:
-        r = requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=8)
+        r = requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=10)
         return 200 <= r.status_code < 300
     except Exception as e:
         print(f"Discord webhook error: {e}")
@@ -189,20 +189,17 @@ def get_next_weekly_spawn(day_time: str):
 
 # ------------------- 5-minute warning logic -------------------
 def _warn_key(source: str, boss_name: str, spawn_dt: datetime) -> str:
-    # unique per spawn so it warns once per spawn cycle
     return f"{source}|{boss_name}|{spawn_dt.strftime('%Y-%m-%d %H:%M')}"
 
 def send_5min_warnings(field_timers):
     """
     Sends ONE warning per boss per spawn when remaining time is within 5 minutes.
-    Runs safely on every rerun.
+    Note: This only runs when the app is actively running/rerunning (e.g. your World page is open).
     """
-    if "warn_sent" not in st.session_state:
-        st.session_state.warn_sent = {}
-
+    st.session_state.setdefault("warn_sent", {})
     now = datetime.now(tz=MANILA)
 
-    # 1) Field bosses
+    # Field bosses
     for t in field_timers:
         spawn_dt = t.next_time
         remaining = (spawn_dt - now).total_seconds()
@@ -217,7 +214,7 @@ def send_5min_warnings(field_timers):
                 if send_discord_message(msg):
                     st.session_state.warn_sent[key] = True
 
-    # 2) Weekly bosses
+    # Weekly bosses
     for boss, times in weekly_boss_data:
         for sched in times:
             spawn_dt = get_next_weekly_spawn(sched)
@@ -233,8 +230,7 @@ def send_5min_warnings(field_timers):
                     if send_discord_message(msg):
                         st.session_state.warn_sent[key] = True
 
-    # Optional cleanup: prevent warn_sent from growing forever
-    # keep only last ~500 keys
+    # keep warn_sent from growing forever
     if len(st.session_state.warn_sent) > 600:
         st.session_state.warn_sent = dict(list(st.session_state.warn_sent.items())[-500:])
 
@@ -416,7 +412,16 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
-# ✅ Send Discord 5-min warnings ONLY on world page (so manage/login won’t spam)
+# ✅ Manual Discord test button (World page only)
+if st.session_state.page == "world":
+    if st.button("🧪 Test Discord Now"):
+        ok = send_discord_message("🔥 TEST MESSAGE FROM LORD9 TIMER (manual test)")
+        if ok:
+            st.success("✅ Sent! Check your Discord channel.")
+        else:
+            st.error("❌ Failed to send. (Webhook / permissions / network)")
+
+# ✅ Send Discord 5-min warnings ONLY on world page
 if st.session_state.page == "world":
     send_5min_warnings(timers)
 
@@ -434,7 +439,6 @@ if st.session_state.page == "world":
 
     with mid_banner:
         next_boss_banner_combined(timers)
-
 else:
     next_boss_banner_combined(timers)
 
@@ -450,6 +454,8 @@ if st.session_state.page == "world":
     with col2:
         st.subheader("📅 Weekly Boss Spawns (Auto-Sorted)")
         display_weekly_boss_table_newstyle()
+
+    st.caption("⚠️ Reminder: Discord warnings only trigger while the World page is running (open), because Streamlit Cloud may sleep.")
 
 # ------------------- LOGIN PAGE -------------------
 elif st.session_state.page == "login":
