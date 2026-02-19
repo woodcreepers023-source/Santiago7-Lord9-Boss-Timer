@@ -390,13 +390,6 @@ def display_weekly_boss_table_newstyle():
 st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
 st.title("🛡️ Lord9 Santiago 7 Boss Timer")
 
-# ✅ Quick diagnostics (does NOT reveal the webhook)
-with st.expander("🧰 Discord Diagnostics", expanded=False):
-    st.write("Webhook configured:", bool(DISCORD_WEBHOOK_URL))
-    if st.button("🧪 Test Discord Now"):
-        ok = send_discord_message("✅ Test message from Boss Timer app.")
-        st.write("Sent:", ok)
-
 # ------------------- Session defaults -------------------
 st.session_state.setdefault("auth", False)
 st.session_state.setdefault("username", "")
@@ -563,4 +556,5 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
 
