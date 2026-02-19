@@ -314,15 +314,31 @@ def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
 
     countdown_cells = []
+    instakill_cells = []
+
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
+
+        # Countdown color
         if secs <= 60:
             color = "red"
         elif secs <= 300:
             color = "orange"
         else:
             color = "green"
-        countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
+
+        countdown_cells.append(
+            f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>"
+        )
+
+        # InstaKill column logic
+        # ✅ READY if within 5 minutes
+        if 0 <= secs <= 300:
+            instakill_cells.append("<span style='color:orange; font-weight:700'>⚔️ READY</span>")
+        elif secs < 0:
+            instakill_cells.append("<span style='color:red; font-weight:800'>🔥 UP</span>")
+        else:
+            instakill_cells.append("")
 
     data = {
         "Boss Name": [t.name for t in timers_sorted],
@@ -331,7 +347,7 @@ def display_boss_table_sorted_newstyle(timers_list):
         "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
         "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
         "Countdown": countdown_cells,
-        "InstaKill": instakill_cells,
+        "InstaKill": instakill_cells,  # ✅ new column
     }
 
     df = pd.DataFrame(data)
@@ -533,4 +549,3 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
-
