@@ -6,6 +6,7 @@ import pandas as pd
 import requests
 import json
 from pathlib import Path
+from urllib.parse import quote_plus, unquote_plus
 
 # ------------------- Config -------------------
 MANILA = ZoneInfo("Asia/Manila")
@@ -334,22 +335,34 @@ def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
     is_admin = bool(st.session_state.get("auth", False))
 
-    # red "button" style for the HTML link
+    # ✅ cleaner skull button: gray default → red hover, plus table polish
     st.markdown("""
     <style>
       a.killbtn{
-        display:inline-block;
-        background:#ff2b2b;
-        color:#fff !important;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        width:38px;
+        height:34px;
+        background:#e5e7eb;
+        color:#111827 !important;
         text-decoration:none !important;
-        font-weight:800;
-        padding:6px 12px;
-        border-radius:8px;
+        font-weight:900;
+        border-radius:10px;
+        border:1px solid #cbd5e1;
+        box-shadow: 0 1px 2px rgba(0,0,0,.12);
       }
       a.killbtn:hover{
-        background:#cc0000;
-        color:#fff !important;
+        background:#ff4d4f;
+        border-color:#ff4d4f;
+        color:#ffffff !important;
+        transform: translateY(-1px);
       }
+      a.killbtn:active{
+        transform: translateY(0px);
+      }
+      table { font-size: 14px; }
+      th { background: #f3f4f6; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -358,20 +371,28 @@ def display_boss_table_sorted_newstyle(timers_list):
 
     for t in timers_sorted:
         secs = t.countdown().total_seconds()
-        if secs <= 60:
-            color = "red"
-        elif secs <= 300:
-            color = "orange"
+
+        # ✅ personal recommendation thresholds:
+        # red < 30 mins, orange < 2 hours, else green
+        if secs <= 1800:
+            color = "#ff4d4f"
+        elif secs <= 7200:
+            color = "#ffa500"
         else:
-            color = "green"
+            color = "#00c853"
 
         countdown_cells.append(
             f"<span style='color:{color}; font-weight:800'>{format_timedelta(t.countdown())}</span>"
         )
 
         if is_admin:
-            # clickable HTML link (works inside df.to_html)
-            killed_cells.append(f"<a class='killbtn' href='?kill={t.name}'>🔴 KILLED NOW</a>")
+            boss_q = quote_plus(t.name)  # safe for spaces/special chars
+            killed_cells.append(
+                f"<a class='killbtn' "
+                f"title='Mark as killed now' "
+                f"onclick=\"return confirm('Mark {t.name} as killed now?')\" "
+                f"href='?kill={boss_q}'>💀</a>"
+            )
         else:
             killed_cells.append("")
 
@@ -441,13 +462,17 @@ timers = st.session_state.timers
 for t in timers:
     t.update_next()
 
-# ---- Handle HTML KILLED NOW click via URL query param ----
-# Clicking the table link sets ?kill=BossName
+# ---- Handle HTML kill click via URL query param ----
 kill_target = ""
 try:
     kill_target = st.query_params.get("kill", "")
 except Exception:
     kill_target = st.experimental_get_query_params().get("kill", [""])[0]
+
+# ✅ decode safely (handles spaces etc.)
+if isinstance(kill_target, list):
+    kill_target = kill_target[0] if kill_target else ""
+kill_target = unquote_plus(kill_target or "")
 
 if st.session_state.page == "world" and st.session_state.auth and kill_target:
     if any(t.name == kill_target for t in st.session_state.timers):
