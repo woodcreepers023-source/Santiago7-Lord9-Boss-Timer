@@ -170,7 +170,6 @@ def send_5min_warnings(field_timers):
     st.session_state.setdefault("warn_sent", {})
     now = now_manila()
 
-    # Field bosses
     for t in field_timers:
         spawn_dt = t.next_time
         remaining = (spawn_dt - now).total_seconds()
@@ -185,7 +184,6 @@ def send_5min_warnings(field_timers):
                 if send_discord_message(msg):
                     st.session_state.warn_sent[key] = True
 
-    # Weekly bosses
     for boss, times in weekly_boss_data:
         for sched in times:
             spawn_dt = get_next_weekly_spawn(sched)
@@ -312,7 +310,6 @@ def mark_boss_killed_by_name(boss_name: str):
     old_time_str = t.last_time.strftime("%Y-%m-%d %I:%M %p")
 
     now_dt = now_manila().replace(second=0, microsecond=0)
-
     t.last_time = now_dt
     t.next_time = now_dt + timedelta(seconds=t.interval_seconds)
 
@@ -328,43 +325,15 @@ def mark_boss_killed_by_name(boss_name: str):
         f"🩸 **{t.name}** was killed by **{killer}** at **{now_dt.strftime('%I:%M %p')}** (Manila Time)"
     )
 
-# ------------------- Field Boss Table (Borders + REAL buttons) -------------------
+# ------------------- Field Boss Table (LOOKS like weekly + buttons below) -------------------
 def display_boss_table_sorted_newstyle(timers_list):
     timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
     is_admin = bool(st.session_state.get("auth", False))
 
-    st.markdown("""
-    <style>
-    .table-header {
-        font-weight: 700;
-        background-color: #f3f4f6;
-        padding: 8px 10px;
-        border: 1px solid #d1d5db;
-    }
-    .table-row {
-        padding: 6px 10px;
-        border: 1px solid #e5e7eb;
-        border-top: none;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Header
-    if is_admin:
-        cols = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2, 0.8])
-        headers = ["Boss Name", "Interval (min)", "Last Spawn", "Next Spawn Date", "Next Spawn Time", "Countdown", "Killed"]
-    else:
-        cols = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2])
-        headers = ["Boss Name", "Interval (min)", "Last Spawn", "Next Spawn Date", "Next Spawn Time", "Countdown"]
-
-    for col, header in zip(cols, headers):
-        col.markdown(f"<div class='table-header'>{header}</div>", unsafe_allow_html=True)
-
-    # Rows
+    rows = []
     for t in timers_sorted:
         cd_td = t.countdown()
         secs = cd_td.total_seconds()
-
         if secs <= 60:
             color = "red"
         elif secs <= 300:
@@ -372,28 +341,37 @@ def display_boss_table_sorted_newstyle(timers_list):
         else:
             color = "green"
 
-        cd_html = f"<span style='color:{color}'>{format_timedelta(cd_td)}</span>"
+        rows.append({
+            "Boss Name": t.name,
+            "Interval (min)": t.interval_minutes,
+            "Last Spawn": t.last_time.strftime("%m-%d-%Y | %H:%M"),
+            "Next Spawn Date": t.next_time.strftime("%b %d, %Y (%a)"),
+            "Next Spawn Time": t.next_time.strftime("%I:%M %p"),
+            "Countdown": f"<span style='color:{color}'>{format_timedelta(cd_td)}</span>",
+        })
 
-        if is_admin:
-            cols = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2, 0.8])
-        else:
-            cols = st.columns([2.2, 1.2, 2.2, 2.2, 1.6, 1.2])
+    df = pd.DataFrame(rows)
 
-        cols[0].markdown(f"<div class='table-row'>{t.name}</div>", unsafe_allow_html=True)
-        cols[1].markdown(f"<div class='table-row'>{t.interval_minutes}</div>", unsafe_allow_html=True)
-        cols[2].markdown(f"<div class='table-row'>{t.last_time.strftime('%m-%d-%Y | %H:%M')}</div>", unsafe_allow_html=True)
-        cols[3].markdown(f"<div class='table-row'>{t.next_time.strftime('%b %d, %Y (%a)')}</div>", unsafe_allow_html=True)
-        cols[4].markdown(f"<div class='table-row'>{t.next_time.strftime('%I:%M %p')}</div>", unsafe_allow_html=True)
-        cols[5].markdown(f"<div class='table-row'>{cd_html}</div>", unsafe_allow_html=True)
+    st.markdown("""
+    <style>
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th, td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; }
+      th { background: #f3f4f6; font-weight: 700; }
+    </style>
+    """, unsafe_allow_html=True)
 
-        if is_admin:
-            with cols[6]:
-                st.markdown("<div class='table-row'>", unsafe_allow_html=True)
-                if st.button("💀", key=f"kill_{t.name}", help="Mark as killed now"):
-                    mark_boss_killed_by_name(t.name)
-                    st.success(f"✅ Saved: {t.name} killed now.")
-                    st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+    # Kill buttons below (reliable Streamlit buttons)
+    if is_admin:
+        st.caption("💀 Kill Switch (Admin only) — click to set Last Spawn = NOW and auto-save")
+        for t in timers_sorted:
+            c1, c2 = st.columns([4, 1])
+            c1.write(t.name)
+            if c2.button("💀", key=f"kill_{t.name}", help="Mark as killed now"):
+                mark_boss_killed_by_name(t.name)
+                st.success(f"✅ Saved: {t.name} killed now.")
+                st.rerun()
 
 # ------------------- Weekly Table -------------------
 def display_weekly_boss_table_newstyle():
