@@ -382,7 +382,7 @@ def display_boss_table_sorted_newstyle(timers_list):
             color = "#00c853"
 
         countdown_cells.append(
-            f"<span style='color:{color}; font-weight:800'>{format_timedelta(t.countdown())}</span>"
+            f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>"
         )
 
         if is_admin:
@@ -631,3 +631,4 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
