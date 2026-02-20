@@ -815,8 +815,8 @@ elif st.session_state.page == "instakill":
                         spawn_str = updated_next.strftime("%B %d, %Y | %I:%M %p")
                         msg = (
                             f"💀 **{t.name}** has been killed.\n"
-                            f"Next spawn: **{spawn_str} (Manila Time)**\n"
-                            f"Updated by **{killer}**"
+                            f"Next spawn: **{spawn_str}** (Manila Time)\n"
+                            f"Updated by {killer}"
                         )
                         send_discord_message(msg)
 
@@ -850,3 +850,4 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
+
