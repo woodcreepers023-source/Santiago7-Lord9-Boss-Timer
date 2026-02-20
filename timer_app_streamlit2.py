@@ -18,7 +18,7 @@ WARN_FILE = Path("warn_sent.json")  # ✅ shared warn dedupe for everyone
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv"
 DISCORD_ROLE_ID = "848324666584989718"
 
-ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "1")
+ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "bestgame")
 WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
 
 
@@ -849,4 +849,5 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
+
 
