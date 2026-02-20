@@ -231,7 +231,6 @@ def send_5min_warnings(field_timers):
             if not warn_sent.get(key, False):
                 spawn_time_only = spawn_dt.strftime("%I:%M %p")
 
-                # ✅ BOLD boss + time + countdown
                 msg = (
                     f"⏳ 5-minute warning!\n"
                     f"**{t.name}** spawns at **{spawn_time_only}** (Manila)\n"
@@ -255,7 +254,6 @@ def send_5min_warnings(field_timers):
                 if not warn_sent.get(key, False):
                     spawn_time_only = spawn_dt.strftime("%I:%M %p")
 
-                    # ✅ BOLD boss + time + countdown
                     msg = (
                         f"⏳ 5-minute warning!\n"
                         f"**{boss}** spawns at **{spawn_time_only}** (Manila)\n"
@@ -481,8 +479,8 @@ st.session_state.setdefault("auth", False)
 st.session_state.setdefault("username", "")
 st.session_state.setdefault("page", "world")  # world | login | manage | history | instakill
 
-# ✅ auto-disappearing toast for Manage page
-st.session_state.setdefault("manage_toast", None)
+# ✅ NEW: store last saved msg for manage (no autorefresh needed)
+st.session_state.setdefault("manage_last_saved", None)
 
 
 def goto(page_name: str):
@@ -597,7 +595,10 @@ elif st.session_state.page == "manage":
             st.success(f"Admin: {st.session_state.username}")
 
         st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
-        st.session_state.setdefault("manage_toast", None)
+
+        # ✅ Show last saved message (no autorefresh, no rerun loops)
+        if st.session_state.manage_last_saved:
+            st.success(st.session_state.manage_last_saved)
 
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
@@ -632,24 +633,11 @@ elif st.session_state.page == "manage":
 
                     log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
 
-                    st.session_state.manage_toast = {
-                        "boss": timer.name,
-                        "msg": f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}",
-                        "ts": now_manila(),
-                    }
-
-                    st.rerun()
-
-                toast = st.session_state.get("manage_toast")
-                if toast and toast["boss"] == timer.name:
-                    age = (now_manila() - toast["ts"]).total_seconds()
-
-                    st.success(toast["msg"])
-                    st_autorefresh(interval=500, key=f"manage_refresh_{timer.name}")
-
-                    if age >= 0.1:
-                        st.session_state.manage_toast = None
-                        st.rerun()
+                    # ✅ store message + show immediately (Streamlit already reruns on click)
+                    st.session_state.manage_last_saved = (
+                        f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
+                    )
+                    st.success(st.session_state.manage_last_saved)
 
 
 # ------------------- HISTORY PAGE -------------------
@@ -810,7 +798,6 @@ elif st.session_state.page == "instakill":
                         updated_last = now_manila()
                         updated_next = updated_last + timedelta(seconds=t.interval_seconds)
 
-                        # ✅ Discord notify (BOLD boss + date/time + updated by)
                         killer = st.session_state.get("username", "Unknown")
                         spawn_str = updated_next.strftime("%B %d, %Y | %I:%M %p")
                         msg = (
@@ -850,5 +837,3 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
-
-
