@@ -15,7 +15,7 @@ DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 WARN_FILE = Path("warn_sent.json")  # ✅ shared warn dedupe for everyone
 
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv"
+DISCORD_WEBHOOK_URL = "PASTE_WEBHOOK_HERE"
 DISCORD_ROLE_ID = "848324666584989718"
 
 ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "bestgame")
@@ -24,7 +24,7 @@ WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
 
 # ------------------- Discord -------------------
 def send_discord_message(message: str) -> bool:
-    if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "PASTE_YOUR_DISCORD_WEBHOOK_HERE":
+    if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "PASTE_WEBHOOK_HERE":
         return False
 
     payload = {"content": message}
@@ -231,6 +231,8 @@ def send_5min_warnings(field_timers):
             if not warn_sent.get(key, False):
                 spawn_time_only = spawn_dt.strftime("%I:%M %p")
 
+                # ✅ Do NOT bold "5-minute warning!" and "(Manila)"
+                # ✅ Bold boss name, time, and countdown only
                 msg = (
                     f"⏳ 5-minute warning!\n"
                     f"**{t.name}** spawns at **{spawn_time_only}** (Manila)\n"
@@ -404,8 +406,6 @@ def display_boss_table_sorted_newstyle(timers_list):
     table td {
         vertical-align: middle !important;
     }
-
-    /* Center columns 2 to 6 (everything except Boss Name) */
     table td:nth-child(2), table th:nth-child(2),
     table td:nth-child(3), table th:nth-child(3),
     table td:nth-child(4), table th:nth-child(4),
@@ -452,7 +452,6 @@ st.title("🛡️ Lord9 Santiago 7 Boss Timer")
 # ------------------- GLOBAL UNIFORM BUTTON STYLE -------------------
 st.markdown("""
 <style>
-/* Make ALL buttons uniform */
 div.stButton > button{
     width: 100% !important;
     border-radius: 12px !important;
@@ -479,13 +478,17 @@ st.session_state.setdefault("auth", False)
 st.session_state.setdefault("username", "")
 st.session_state.setdefault("page", "world")  # world | login | manage | history | instakill
 
-# ✅ Store last saved message for Manage page
+# ✅ per-boss manage green messages
+st.session_state.setdefault("manage_saved_msgs", {})
+
+# optional (safe)
 st.session_state.setdefault("manage_last_saved", None)
 
 
 def goto(page_name: str):
-    # ✅ Clear Manage green message when leaving Manage page
+    # ✅ Clear Manage green messages when leaving Manage page
     if st.session_state.page == "manage" and page_name != "manage":
+        st.session_state.manage_saved_msgs = {}
         st.session_state.manage_last_saved = None
 
     st.session_state.page = page_name
@@ -581,32 +584,24 @@ elif st.session_state.page == "manage":
         with top1:
             if st.button("⏱️ Boss Tracker", use_container_width=True):
                 goto("world")
-
         with top2:
             if st.button("💀 InstaKill", use_container_width=True):
                 goto("instakill")
-
         with top3:
             if st.button("🛠️ Manage", use_container_width=True):
                 goto("manage")
-
         with top4:
             if st.button("📜 History", use_container_width=True):
                 goto("history")
-
         with top5:
             if st.button("🚪 Logout", use_container_width=True):
                 st.session_state.auth = False
                 st.session_state.username = ""
                 goto("world")
-
         with top6:
             st.success(f"Admin: {st.session_state.username}")
 
         st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
-
-        # ✅ per-boss green messages (persist on Manage until you leave Manage)
-        st.session_state.setdefault("manage_saved_msgs", {})
 
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
@@ -631,30 +626,69 @@ elif st.session_state.page == "manage":
                     updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
                     updated_next_time = updated_last_time + timedelta(seconds=timer.interval_seconds)
 
-                    # Update in-memory timers
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
 
-                    # Save to JSON
                     save_boss_data([
                         (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
                         for t in st.session_state.timers
                     ])
 
-                    # Log history
                     log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
 
-                    # ✅ Set green message for THIS boss (below Save button)
                     st.session_state.manage_saved_msgs[timer.name] = (
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
 
                     st.rerun()
 
-                # ✅ Show green message BELOW Save button
                 msg = st.session_state.manage_saved_msgs.get(timer.name)
                 if msg:
                     st.success(msg)
+
+
+# ------------------- HISTORY PAGE -------------------
+elif st.session_state.page == "history":
+    if not st.session_state.auth:
+        st.warning("You must login first.")
+        if st.button("Go to Login", use_container_width=True):
+            goto("login")
+    else:
+        t1, t2, t3, t4, t5, t6 = st.columns([1.2, 1.2, 1.2, 1.2, 1.2, 2.0])
+
+        with t1:
+            if st.button("⏱️ Boss Tracker", use_container_width=True):
+                goto("world")
+        with t2:
+            if st.button("💀 InstaKill", use_container_width=True):
+                goto("instakill")
+        with t3:
+            if st.button("🛠️ Manage", use_container_width=True):
+                goto("manage")
+        with t4:
+            if st.button("📜 History", use_container_width=True):
+                goto("history")
+        with t5:
+            if st.button("🚪 Logout", use_container_width=True):
+                st.session_state.auth = False
+                st.session_state.username = ""
+                goto("world")
+        with t6:
+            st.success(f"Admin: {st.session_state.username}")
+
+        st.subheader("📜 Edit History")
+
+        if HISTORY_FILE.exists():
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                history = json.load(f)
+
+            if history:
+                df_history = pd.DataFrame(history).sort_values("edited_at", ascending=False)
+                st.dataframe(df_history, use_container_width=True)
+            else:
+                st.info("No edits yet.")
+        else:
+            st.info("No edit history yet.")
 
 
 # ------------------- INSTAKILL PAGE -------------------
@@ -773,6 +807,9 @@ elif st.session_state.page == "instakill":
 
                         killer = st.session_state.get("username", "Unknown")
                         spawn_str = updated_next.strftime("%B %d, %Y | %I:%M %p")
+
+                        # ✅ Bold boss + date/time ONLY
+                        # ✅ Do NOT bold "(Manila Time)" and do NOT bold killer name
                         msg = (
                             f"💀 **{t.name}** has been killed.\n"
                             f"Next spawn: **{spawn_str}** (Manila Time)\n"
@@ -810,7 +847,3 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
-
-
-
-
