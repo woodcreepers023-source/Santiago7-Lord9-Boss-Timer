@@ -13,7 +13,7 @@ MANILA = ZoneInfo("Asia/Manila")
 
 DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
-WARN_FILE = Path("warn_sent.json")  # ✅ shared warn dedupe for everyone
+WARN_FILE = Path("warn_sent.json")
 
 # Tip: move webhook to secrets.toml later if you want
 DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv"
@@ -239,8 +239,6 @@ def send_5min_warnings(field_timers):
             if not warn_sent.get(key, False):
                 spawn_time_only = spawn_dt.strftime("%I:%M %p")
 
-                # ✅ Don't bold: "5-minute warning!" and "(Manila)"
-                # ✅ Bold: boss, time, countdown
                 msg = (
                     f"⏳ 5-minute warning!\n"
                     f"**{t.name}** spawns at **{spawn_time_only}** (Manila)\n"
@@ -505,15 +503,12 @@ st.session_state.setdefault("auth", False)
 st.session_state.setdefault("username", "")
 st.session_state.setdefault("page", "world")  # world | login | manage | history | instakill
 
-# ✅ per-boss manage green messages
 st.session_state.setdefault("manage_saved_msgs", {})
 
-# ✅ insta toast
 st.session_state.setdefault("ik_toast", None)
 
 
 def goto(page_name: str):
-    # ✅ Clear Manage green messages when leaving Manage page
     if st.session_state.page == "manage" and page_name != "manage":
         st.session_state.manage_saved_msgs = {}
 
@@ -769,7 +764,6 @@ elif st.session_state.page == "instakill":
                         killer = st.session_state.get("username", "Unknown")
                         spawn_str = updated_next.strftime("%B %d, %Y | %I:%M %p")
 
-                        # ✅ Bold boss + date/time ONLY (not "(Manila Time)" and not killer)
                         msg = (
                             f"💀 **{t.name}** has been killed.\n"
                             f"Next spawn: **{spawn_str}** (Manila Time)\n"
@@ -808,4 +802,5 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
+
 
