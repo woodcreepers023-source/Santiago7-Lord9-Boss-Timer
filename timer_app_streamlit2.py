@@ -596,8 +596,8 @@ elif st.session_state.page == "manage":
 
         st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
-        # ✅ per-boss success messages
-        st.session_state.setdefault("manage_saved_msgs", {})  # dict: boss_name -> msg
+        # ✅ Store per-boss green messages
+        st.session_state.setdefault("manage_saved_msgs", {})
 
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
@@ -622,38 +622,30 @@ elif st.session_state.page == "manage":
                     updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
                     updated_next_time = updated_last_time + timedelta(seconds=timer.interval_seconds)
 
-                    # ✅ update in-memory timers
+                    # Update in-memory timers
                     st.session_state.timers[i].last_time = updated_last_time
                     st.session_state.timers[i].next_time = updated_next_time
 
-                    # ✅ persist to json
+                    # Save to JSON
                     save_boss_data([
                         (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
                         for t in st.session_state.timers
                     ])
 
-                    # ✅ history
+                    # Log history
                     log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
 
-                    # ✅ set green message for THIS boss only
+                    # Set green message for this boss
                     st.session_state.manage_saved_msgs[timer.name] = (
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
 
                     st.rerun()
 
-                # ✅ show green notif BELOW save button (inside expander)
+                # Show green message below Save
                 msg = st.session_state.manage_saved_msgs.get(timer.name)
                 if msg:
                     st.success(msg)
-
-                    if st.button(
-                        f"Clear message ({timer.name})",
-                        key=f"clear_{timer.name}",
-                        use_container_width=True
-                    ):
-                        st.session_state.manage_saved_msgs.pop(timer.name, None)
-                        st.rerun()
 
 
 # ------------------- INSTAKILL PAGE -------------------
@@ -809,4 +801,5 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
+
 
