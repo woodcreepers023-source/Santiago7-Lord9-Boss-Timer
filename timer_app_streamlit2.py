@@ -21,7 +21,7 @@ DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1474182220599267451/4vFg
 ROLE_ID = "1447357096608661694"
 ROLE_MENTION = f"<@&{ROLE_ID}>" if ROLE_ID else ""
 
-ADMIN_PASSWORD = "bestgame"
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "bestgame")
 
 WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
 
@@ -555,3 +555,4 @@ elif st.session_state.page == "history":
                 st.info("No edits yet.")
         else:
             st.info("No edit history yet.")
+
