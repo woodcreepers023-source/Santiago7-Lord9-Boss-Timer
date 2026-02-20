@@ -810,13 +810,13 @@ elif st.session_state.page == "instakill":
                         updated_last = now_manila()
                         updated_next = updated_last + timedelta(seconds=t.interval_seconds)
 
-                        # ✅ Discord notify (your preferred format with date)
+                        # ✅ Discord notify (BOLD boss + date/time + updated by)
                         killer = st.session_state.get("username", "Unknown")
                         spawn_str = updated_next.strftime("%B %d, %Y | %I:%M %p")
                         msg = (
-                            f"💀 {t.name} has been killed. "
-                            f"Next spawn: {spawn_str} (Manila). "
-                            f"Updated by {killer}."
+                            f"💀 **{t.name}** has been killed.\n"
+                            f"Next spawn: **{spawn_str} (Manila Time)**\n"
+                            f"Updated by **{killer}**"
                         )
                         send_discord_message(msg)
 
@@ -850,6 +850,3 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
-
-
-
