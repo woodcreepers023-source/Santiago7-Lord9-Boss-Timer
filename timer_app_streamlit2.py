@@ -479,11 +479,15 @@ st.session_state.setdefault("auth", False)
 st.session_state.setdefault("username", "")
 st.session_state.setdefault("page", "world")  # world | login | manage | history | instakill
 
-# ✅ NEW: store last saved msg for manage (no autorefresh needed)
+# ✅ Store last saved message for Manage page
 st.session_state.setdefault("manage_last_saved", None)
 
 
 def goto(page_name: str):
+    # ✅ Clear Manage green message when leaving Manage page
+    if st.session_state.page == "manage" and page_name != "manage":
+        st.session_state.manage_last_saved = None
+
     st.session_state.page = page_name
     st.rerun()
 
@@ -801,5 +805,6 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
+
 
 
