@@ -596,15 +596,9 @@ elif st.session_state.page == "manage":
 
         st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
-        # ✅ Toast that auto-disappears after 3 seconds (safe)
-        toast = st.session_state.get("manage_toast")
-        if toast:
-            age = (now_manila() - toast["ts"]).total_seconds()
-            if age < 3:
-                st.success(toast["msg"])
-                st_autorefresh(interval=500, key="manage_toast_refresh")  # refresh only while showing toast
-            else:
-                st.session_state.manage_toast = None
+        # ✅ Show last saved message (no autorefresh, no rerun loops)
+        if st.session_state.manage_last_saved:
+            st.success(st.session_state.manage_last_saved)
 
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
@@ -639,13 +633,12 @@ elif st.session_state.page == "manage":
 
                     log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
 
-                    # ✅ set toast (3 seconds)
-                    st.session_state.manage_toast = {
-                        "msg": f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}",
-                        "ts": now_manila(),
-                    }
+                    # ✅ store message + show immediately (Streamlit already reruns on click)
+                    st.session_state.manage_last_saved = (
+                        f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
+                    )
+                    st.success(st.session_state.manage_last_saved)
 
-                    st.rerun()
 
 # ------------------- HISTORY PAGE -------------------
 elif st.session_state.page == "history":
@@ -844,4 +837,3 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
-
