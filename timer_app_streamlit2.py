@@ -581,26 +581,31 @@ elif st.session_state.page == "manage":
         with top1:
             if st.button("⏱️ Boss Tracker", use_container_width=True):
                 goto("world")
+
         with top2:
             if st.button("💀 InstaKill", use_container_width=True):
                 goto("instakill")
+
         with top3:
             if st.button("🛠️ Manage", use_container_width=True):
                 goto("manage")
+
         with top4:
             if st.button("📜 History", use_container_width=True):
                 goto("history")
+
         with top5:
             if st.button("🚪 Logout", use_container_width=True):
                 st.session_state.auth = False
                 st.session_state.username = ""
                 goto("world")
+
         with top6:
             st.success(f"Admin: {st.session_state.username}")
 
         st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
-        # ✅ Store per-boss green messages
+        # ✅ per-boss green messages (persist on Manage until you leave Manage)
         st.session_state.setdefault("manage_saved_msgs", {})
 
         for i, timer in enumerate(timers):
@@ -639,14 +644,14 @@ elif st.session_state.page == "manage":
                     # Log history
                     log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
 
-                    # Set green message for this boss
+                    # ✅ Set green message for THIS boss (below Save button)
                     st.session_state.manage_saved_msgs[timer.name] = (
                         f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
                     )
 
                     st.rerun()
 
-                # Show green message below Save
+                # ✅ Show green message BELOW Save button
                 msg = st.session_state.manage_saved_msgs.get(timer.name)
                 if msg:
                     st.success(msg)
@@ -805,6 +810,7 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
+
 
 
 
