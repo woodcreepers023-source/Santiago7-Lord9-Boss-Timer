@@ -231,11 +231,11 @@ def send_5min_warnings(field_timers):
             if not warn_sent.get(key, False):
                 spawn_time_only = spawn_dt.strftime("%I:%M %p")
 
-                # ✅ EXACT format you want + role mention at bottom
+                # ✅ BOLD boss + time + countdown
                 msg = (
-                    f"⏳ 5-minute warning!\n"
-                    f"{t.name} spawns at {spawn_time_only} (Manila)\n"
-                    f"Time left: {format_timedelta(spawn_dt - now)}\n"
+                    f"⏳ **5-minute warning!**\n"
+                    f"**{t.name}** spawns at **{spawn_time_only} (Manila)**\n"
+                    f"Time left: **{format_timedelta(spawn_dt - now)}**\n"
                     f"<@&{DISCORD_ROLE_ID}>"
                 )
 
@@ -255,10 +255,11 @@ def send_5min_warnings(field_timers):
                 if not warn_sent.get(key, False):
                     spawn_time_only = spawn_dt.strftime("%I:%M %p")
 
+                    # ✅ BOLD boss + time + countdown
                     msg = (
-                        f"⏳ 5-minute warning!\n"
-                        f"{boss} spawns at {spawn_time_only} (Manila)\n"
-                        f"Time left: {format_timedelta(spawn_dt - now)}\n"
+                        f"⏳ **5-minute warning!**\n"
+                        f"**{boss}** spawns at **{spawn_time_only} (Manila)**\n"
+                        f"Time left: **{format_timedelta(spawn_dt - now)}**\n"
                         f"<@&{DISCORD_ROLE_ID}>"
                     )
 
@@ -849,5 +850,6 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
+
 
 
