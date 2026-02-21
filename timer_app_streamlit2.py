@@ -263,7 +263,7 @@ def send_5min_warnings(field_timers):
 
                     msg = (
                         f"⏳ 5-minute warning!\n"
-                        f"**{boss}** spawns at **{spawn_time_only}** (Manila)\n"
+                        f"**{boss}** spawns at **{spawn_time_only}** (Manila Time)\n"
                         f"Time left: **{format_timedelta(spawn_dt - now)}**\n"
                         f"<@&{DISCORD_ROLE_ID}>"
                     )
@@ -802,6 +802,7 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
+
 
 
 
