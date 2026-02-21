@@ -16,8 +16,8 @@ HISTORY_FILE = Path("boss_history.json")
 WARN_FILE = Path("warn_sent.json")
 
 # Tip: move webhook to secrets.toml later if you want
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1473903250557243525/cV1UCkQ9Pfo3d4hBuSCwqX1xDf69tSWjyl9h413i0znMQENP8bkRAUMjrZAC-vwsbJpv"
-DISCORD_ROLE_ID = "848324666584989718"
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1474251528377466932/gO9aIgcH4F8-OFme1G2ghp4frY2d-1FZO5EGcLFlw5D1pdyYBUJo_FWfNf8qnCtJboXc"
+DISCORD_ROLE_ID = "1474251852538446050"
 
 ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "bestgame")
 WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
@@ -802,5 +802,6 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
+
 
 
