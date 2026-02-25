@@ -15,23 +15,30 @@ DATA_FILE = Path("boss_timers.json")
 HISTORY_FILE = Path("boss_history.json")
 WARN_FILE = Path("warn_sent.json")
 
-# Tip: move webhook to secrets.toml later if you want
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1474251528377466932/gO9aIgcH4F8-OFme1G2ghp4frY2d-1FZO5EGcLFlw5D1pdyYBUJo_FWfNf8qnCtJboXc"
-DISCORD_ROLE_ID = "1474251852538446050"
-
 ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "bestgame")
 WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
 
+# ------------------- Discord (TWO TARGETS) -------------------
+DISCORD_TARGETS = [
+    {
+        "name": "discord_1",
+        "webhook": "https://discord.com/api/webhooks/1474251528377466932/gO9aIgcH4F8-OFme1G2ghp4frY2d-1FZO5EGcLFlw5D1pdyYBUJo_FWfNf8qnCtJboXc",
+        "role_id": "1474251852538446050",
+    },
+    {
+        "name": "discord_2",
+        "webhook": "https://discord.com/api/webhooks/1476030526300098724/JNIPfUDqtY1AOT3zN1D8MkDamIDMXSlWBDcKktTNgo2oz0j7Zn15yaiU6WkvJAWyHvgp",
+        "role_id": "1476031613648240651",
+    },
+]
 
-# ------------------- Discord -------------------
-def send_discord_message(message: str) -> bool:
-    if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "PASTE_WEBHOOK_HERE":
+
+def _post_webhook(webhook_url: str, payload: dict) -> bool:
+    if not webhook_url or "discord.com/api/webhooks/" not in webhook_url:
         return False
 
-    payload = {"content": message}
-
     try:
-        r = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
+        r = requests.post(webhook_url, json=payload, timeout=10)
 
         # Discord rate limit
         if r.status_code == 429:
@@ -42,11 +49,24 @@ def send_discord_message(message: str) -> bool:
                 retry_after = 1.0
 
             time.sleep(min(retry_after, 2.5))
-            r = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
+            r = requests.post(webhook_url, json=payload, timeout=10)
 
         return 200 <= r.status_code < 300
     except Exception:
         return False
+
+
+def send_discord_message_to_all(message_builder) -> bool:
+    """
+    message_builder: function(target_dict) -> message_str
+    Returns True if at least one Discord target succeeded.
+    """
+    any_ok = False
+    for target in DISCORD_TARGETS:
+        msg = message_builder(target)
+        ok = _post_webhook(target.get("webhook", ""), {"content": msg})
+        any_ok = any_ok or ok
+    return any_ok
 
 
 # ------------------- Helpers -------------------
@@ -74,28 +94,28 @@ def logout_and_go_world():
 
 # ------------------- Default Boss Data -------------------
 default_boss_data = [
-    ("Venatus", 600, "2025-09-19 12:31 PM"),
-    ("Viorent", 600, "2025-09-19 12:32 PM"),
-    ("Ego", 1260, "2025-09-19 04:32 PM"),
-    ("Livera", 1440, "2025-09-19 04:36 PM"),
-    ("Undomiel", 1440, "2025-09-19 04:42 PM"),
-    ("Araneo", 1440, "2025-09-19 04:33 PM"),
-    ("Lady Dalia", 1080, "2025-09-19 05:58 AM"),
-    ("General Aquleus", 1740, "2025-09-18 09:45 PM"),
-    ("Amentis", 1740, "2025-09-18 09:42 PM"),
-    ("Baron Braudmore", 1920, "2025-09-19 12:37 AM"),
-    ("Wannitas", 2880, "2025-09-19 04:46 PM"),
-    ("Metus", 2880, "2025-09-18 06:53 AM"),
-    ("Duplican", 2880, "2025-09-19 04:40 PM"),
-    ("Shuliar", 2100, "2025-09-19 03:49 AM"),
-    ("Gareth", 1920, "2025-09-19 12:38 AM"),
-    ("Titore", 2220, "2025-09-19 04:36 PM"),
-    ("Larba", 2100, "2025-09-19 03:55 AM"),
-    ("Catena", 2100, "2025-09-19 04:12 AM"),
-    ("Secreta", 3720, "2025-09-17 05:15 PM"),
-    ("Ordo", 3720, "2025-09-17 05:07 PM"),
-    ("Asta", 3720, "2025-09-17 04:59 PM"),
-    ("Supore", 3720, "2025-09-20 07:15 AM"),
+    ("Venatus", 600, "2026-02-24 05:05 PM"),
+    ("Viorent", 600, "2026-02-24 05:05 PM"),
+    ("Ego", 1260, "2026-02-24 05:05 PM"),
+    ("Livera", 1440, "2026-02-24 05:05 PM"),
+    ("Undomiel", 1440, "2026-02-24 05:05 PM"),
+    ("Araneo", 1440, "2026-02-24 05:05 PM"),
+    ("Lady Dalia", 1080, "2026-02-24 05:05 PM"),
+    ("General Aquleus", 1740, "2026-02-24 05:05 PM"),
+    ("Amentis", 1740, "2026-02-24 05:05 PM"),
+    ("Baron Braudmore", 1920, "2026-02-24 05:05 PM"),
+    ("Wannitas", 2880, "2026-02-24 05:05 PM"),
+    ("Metus", 2880, "2026-02-24 05:05 PM"),
+    ("Duplican", 2880, "2026-02-24 05:05 PM"),
+    ("Shuliar", 2100, "2026-02-24 05:05 PM"),
+    ("Gareth", 1920, "2026-02-24 05:05 PM"),
+    ("Titore", 2220, "2026-02-24 05:05 PM"),
+    ("Larba", 2100, "2026-02-24 05:05 PM"),
+    ("Catena", 2100, "2026-02-24 05:05 PM"),
+    ("Secreta", 3720, "2026-02-24 05:05 PM"),
+    ("Ordo", 3720, "2026-02-24 05:05 PM"),
+    ("Asta", 3720, "2026-02-24 05:05 PM"),
+    ("Supore", 3720, "2026-02-24 05:05 PM"),
 ]
 
 
@@ -104,7 +124,6 @@ def load_boss_data():
     if DATA_FILE.exists():
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        # safety: ensure list format
         return data if isinstance(data, list) else default_boss_data.copy()
     return default_boss_data.copy()
 
@@ -127,7 +146,6 @@ def load_warn_sent() -> dict:
 
 
 def save_warn_sent(warn_dict: dict) -> None:
-    # prevent file from growing forever
     if len(warn_dict) > 1200:
         warn_dict = dict(list(warn_dict.items())[-900:])
 
@@ -241,14 +259,17 @@ def send_5min_warnings(field_timers):
             if not warn_sent.get(key, False):
                 spawn_time_only = spawn_dt.strftime("%I:%M %p")
 
-                msg = (
-                    f"⏳ 5-minute warning!\n"
-                    f"**{t.name}** spawns at **{spawn_time_only}** (Manila Time)\n"
-                    f"Time left: **{format_timedelta(spawn_dt - now)}**\n"
-                    f"<@&{DISCORD_ROLE_ID}>"
-                )
+                def build_msg(target):
+                    role_id = target.get("role_id", "")
+                    ping = f"<@&{role_id}>" if role_id and "PASTE_ROLE_ID" not in role_id else ""
+                    return (
+                        f"⏳ 5-minute warning!\n"
+                        f"**{t.name}** spawns at **{spawn_time_only}** (Manila Time)\n"
+                        f"Time left: **{format_timedelta(spawn_dt - now)}**\n"
+                        f"{ping}"
+                    )
 
-                if send_discord_message(msg):
+                if send_discord_message_to_all(build_msg):
                     warn_sent[key] = True
                     changed = True
 
@@ -263,14 +284,17 @@ def send_5min_warnings(field_timers):
                 if not warn_sent.get(key, False):
                     spawn_time_only = spawn_dt.strftime("%I:%M %p")
 
-                    msg = (
-                        f"⏳ 5-minute warning!\n"
-                        f"**{boss}** spawns at **{spawn_time_only}** (Manila Time)\n"
-                        f"Time left: **{format_timedelta(spawn_dt - now)}**\n"
-                        f"<@&{DISCORD_ROLE_ID}>"
-                    )
+                    def build_msg(target):
+                        role_id = target.get("role_id", "")
+                        ping = f"<@&{role_id}>" if role_id and "PASTE_ROLE_ID" not in role_id else ""
+                        return (
+                            f"⏳ 5-minute warning!\n"
+                            f"**{boss}** spawns at **{spawn_time_only}** (Manila Time)\n"
+                            f"Time left: **{format_timedelta(spawn_dt - now)}**\n"
+                            f"{ping}"
+                        )
 
-                    if send_discord_message(msg):
+                    if send_discord_message_to_all(build_msg):
                         warn_sent[key] = True
                         changed = True
 
@@ -504,16 +528,13 @@ div.stButton > button:active{
 st.session_state.setdefault("auth", False)
 st.session_state.setdefault("username", "")
 st.session_state.setdefault("page", "world")  # world | login | manage | history | instakill
-
 st.session_state.setdefault("manage_saved_msgs", {})
-
 st.session_state.setdefault("ik_toast", None)
 
 
 def goto(page_name: str):
     if st.session_state.page == "manage" and page_name != "manage":
         st.session_state.manage_saved_msgs = {}
-
     st.session_state.page = page_name
     st.rerun()
 
@@ -605,7 +626,6 @@ elif st.session_state.page == "manage":
 
         for i, timer in enumerate(timers):
             with st.expander(f"Edit {timer.name}", expanded=False):
-
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
                     value=timer.last_time.date(),
@@ -620,7 +640,6 @@ elif st.session_state.page == "manage":
                 )
 
                 if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
-
                     old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
 
                     updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
@@ -771,7 +790,9 @@ elif st.session_state.page == "instakill":
                             f"Next spawn: **{spawn_str}** (Manila Time)\n"
                             f"Updated by {killer}"
                         )
-                        send_discord_message(msg)
+
+                        # ✅ send to both Discords
+                        send_discord_message_to_all(lambda target: msg)
 
                         for idx, obj in enumerate(st.session_state.timers):
                             if obj.name == t.name:
@@ -793,7 +814,6 @@ elif st.session_state.page == "instakill":
 
                         st.rerun()
 
-        # keep your existing instakill toast behavior
         if st.session_state.ik_toast:
             toast = st.session_state.ik_toast
             age = (now_manila() - toast["ts"]).total_seconds()
@@ -804,13 +824,3 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
-
-
-
-
-
-
-
-
-
-
