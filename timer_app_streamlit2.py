@@ -655,7 +655,41 @@ elif st.session_state.page == "manage":
 
         st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
 
-        for i, timer in enumerate(timers):
+        # ✅ YOUR CUSTOM ORDER
+        CUSTOM_MANAGE_ORDER = [
+            "Venatus",
+            "Viorent",
+            "Lady Dalia",
+            "Ego",
+            "Livera",
+            "Araneo",
+            "Undomiel",
+            "General Aquleus",
+            "Amentis",
+            "Baron Braudmore",
+            "Gareth",
+            "Shuliar",
+            "Larba",
+            "Catena",
+            "Titore",
+            "Wanitas",
+            "Metus",
+            "Duplican",
+            "Asta",
+            "Ordo",
+            "Secreta",
+            "Supore",
+        ]
+
+        # ✅ Create order map
+        order_index = {name: i for i, name in enumerate(CUSTOM_MANAGE_ORDER)}
+
+        # ✅ Sort timers based on your custom order
+        timers_sorted = sorted(timers, key=lambda x: order_index.get(x.name, 999))
+
+        for timer in timers_sorted:
+            i = timers.index(timer)  # IMPORTANT: keep correct index for saving
+
             with st.expander(f"Edit {timer.name}", expanded=False):
                 new_date = st.date_input(
                     f"{timer.name} Last Date",
