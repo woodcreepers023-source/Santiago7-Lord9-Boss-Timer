@@ -766,33 +766,15 @@ elif st.session_state.page == "instakill":
 
         st.subheader("💀 InstaKill")
 
-        CUSTOM_BOSS_ORDER = [
-            "Venatus",
-            "Viorent",
-            "Ego",
-            "Livera",
-            "Undomiel",
-            "Araneo",
-            "Lady Dalia",
-            "General Aquleus",
-            "Amentis",
-            "Baron Braudmore",
-            "Wannitas",
-            "Metus",
-            "Duplican",
-            "Shuliar",
-            "Gareth",
-            "Titore",
-            "Larba",
-            "Catena",
-            "Secreta",
-            "Ordo",
-            "Asta",
-            "Supore",
+        # ✅ PERFECT CUSTOM ROW LAYOUT
+        ROW_LAYOUT = [
+            ["Venatus", "Viorent", "Lady Dalia", "Ego", "Livera", "Araneo", "Undomiel"],
+            ["General Aquleus", "Amentis", "Baron Braudmore", "Gareth", "Shuliar", "Larba", "Catena"],
+            ["Titore", "Wanitas", "Metus", "Duplican", "Asta", "Ordo", "Secreta", "Supore"],
         ]
 
-        order_index = {name: i for i, name in enumerate(CUSTOM_BOSS_ORDER)}
-        timers_sorted = sorted(timers, key=lambda x: order_index.get(x.name, 999))
+        # Map timer names
+        name_to_timer = {t.name: t for t in timers}
 
         st.markdown("""
         <style>
@@ -804,6 +786,7 @@ elif st.session_state.page == "instakill":
           text-align: center;
           margin-bottom: 14px;
         }
+
         .ik-name{
           font-size: 13px;
           font-weight: 800;
@@ -812,32 +795,36 @@ elif st.session_state.page == "instakill":
           text-transform: uppercase;
           padding: 6px 0 10px 0;
         }
+
         .ik-card div.stButton > button{
           margin-top: 6px !important;
         }
         </style>
         """, unsafe_allow_html=True)
 
-        CARDS_PER_ROW = 8
+        # ✅ MANUAL ROW RENDERING
+        for row in ROW_LAYOUT:
+            cols = st.columns(len(row))
 
-        for start in range(0, len(timers_sorted), CARDS_PER_ROW):
-            row = timers_sorted[start:start + CARDS_PER_ROW]
-            cols = st.columns(CARDS_PER_ROW)
+            for i, boss_name in enumerate(row):
+                with cols[i]:
 
-            for j in range(CARDS_PER_ROW):
-                with cols[j]:
-                    if j >= len(row):
+                    t = name_to_timer.get(boss_name)
+
+                    if not t:
                         st.empty()
                         continue
-
-                    t = row[j]
 
                     st.markdown(
                         f"<div class='ik-card'><div class='ik-name'>{t.name}</div>",
                         unsafe_allow_html=True
                     )
 
-                    clicked = st.button("Killed Now", key=f"ik_{t.name}", use_container_width=True)
+                    clicked = st.button(
+                        "Killed Now",
+                        key=f"ik_{t.name}",
+                        use_container_width=True
+                    )
 
                     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -856,30 +843,46 @@ elif st.session_state.page == "instakill":
                             f"Updated by {killer}"
                         )
 
-                        # send to each Discord target once
+                        # Send to Discord targets
                         for target in DISCORD_TARGETS:
                             _post_webhook(target.get("webhook", ""), {"content": msg})
 
+                        # Update timer in session
                         for idx, obj in enumerate(st.session_state.timers):
                             if obj.name == t.name:
                                 st.session_state.timers[idx].last_time = updated_last
                                 st.session_state.timers[idx].next_time = updated_next
                                 break
 
+                        # Save updated data
                         save_boss_data([
-                            (x.name, x.interval_minutes, x.last_time.strftime("%Y-%m-%d %I:%M %p"))
+                            (
+                                x.name,
+                                x.interval_minutes,
+                                x.last_time.strftime("%Y-%m-%d %I:%M %p")
+                            )
                             for x in st.session_state.timers
                         ])
 
-                        log_edit(t.name, old_time_str, updated_last.strftime("%Y-%m-%d %I:%M %p"))
+                        # Log history
+                        log_edit(
+                            t.name,
+                            old_time_str,
+                            updated_last.strftime("%Y-%m-%d %I:%M %p")
+                        )
 
+                        # Success toast
                         st.session_state.ik_toast = {
-                            "msg": f"✅ {t.name} updated! Next: {updated_next.strftime('%Y-%m-%d %I:%M %p')}",
+                            "msg": (
+                                f"✅ {t.name} updated! "
+                                f"Next: {updated_next.strftime('%Y-%m-%d %I:%M %p')}"
+                            ),
                             "ts": now_manila(),
                         }
 
                         st.rerun()
 
+        # ✅ Toast popup
         if st.session_state.ik_toast:
             toast = st.session_state.ik_toast
             age = (now_manila() - toast["ts"]).total_seconds()
@@ -890,4 +893,3 @@ elif st.session_state.page == "instakill":
             if age >= 2.5:
                 st.session_state.ik_toast = None
                 st.rerun()
-
