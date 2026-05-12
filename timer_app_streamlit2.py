@@ -27,8 +27,8 @@ DISCORD_TARGETS = [
     },
     {
         "name": "discord_2",
-        "webhook": "https://discord.com/api/webhooks/1476030526300098724/JNIPfUDqtY1AOT3zN1D8MkDamIDMXSlWBDcKktTNgo2oz0j7Zn15yaiU6WkvJAWyHvgp",
-        "role_id": "1476031613648240651",
+        "webhook": "111111",
+        "role_id": "111111",
     },
 ]
 
