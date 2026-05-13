@@ -22,8 +22,8 @@ WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
 DISCORD_TARGETS = [
     {
         "name": "discord_1",
-        "webhook": "https://discord.com/api/webhooks/1474251528377466932/gO9aIgcH4F8-OFme1G2ghp4frY2d-1FZO5EGcLFlw5D1pdyYBUJo_FWfNf8qnCtJboXc",
-        "role_id": "1474251852538446050",
+        "webhook": "111111",
+        "role_id": "111111",
     },
     {
         "name": "discord_2",
