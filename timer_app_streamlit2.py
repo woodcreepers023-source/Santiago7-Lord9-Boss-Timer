@@ -94,28 +94,28 @@ def logout_and_go_world():
 
 # ------------------- Default Boss Data -------------------
 default_boss_data = [
-    ("Venatus", 600, "2026-05-02 11:36 AM"),
-    ("Viorent", 600, "2026-05-02 11:38 AM"),
-    ("Ego", 1260, "2026-05-02 04:44 AM"),
-    ("General Aquleus", 1740, "2026-05-01 11:46 PM"),
-    ("Amentis", 1740, "2026-05-01 11:48 PM"),
-    ("Lady Dalia", 1080, "2026-05-02 01:49 PM"),
-    ("Livera", 1440, "2026-05-02 01:39 PM"),
-    ("Metus", 2880, "2026-05-01 01:40 PM"),
-    ("Baron Braudmore", 1920, "2026-05-02 05:42 AM"),
-    ("Araneo", 1440, "2026-05-02 01:43 PM"),
-    ("Undomiel", 1440, "2026-05-02 01:45 PM"),
-    ("Gareth", 1920, "2026-05-02 05:46 AM"),
-    ("Wanitas", 2880, "2026-05-01 01:47 PM"),
-    ("Duplican", 2880, "2026-05-01 01:52 PM"),
-    ("Shuliar", 2100, "2026-05-02 11:50 AM"),
-    ("Larba", 2100, "2026-05-02 11:53 AM"),
-    ("Catena", 2100, "2026-05-02 12:00 PM"),
-    ("Titore", 2220, "2026-05-02 03:42 PM"),
-    ("Asta", 3720, "2026-05-02 03:37 AM"),
-    ("Ordo", 3720, "2026-05-02 03:39 AM"),
-    ("Secreta", 3720, "2026-05-02 03:42 AM"),
-    ("Supore", 3720, "2026-05-02 03:46 AM"),
+    ("Venatus", 600, "2026-05-13 01:05 PM"),
+    ("Viorent", 600, "2026-05-13 01:05 PM"),
+    ("Ego", 1260, "2026-05-13 01:05 PM"),
+    ("General Aquleus", 1740, "2026-05-13 01:05 PM"),
+    ("Amentis", 1740, "2026-05-13 01:05 PM"),
+    ("Lady Dalia", 1080, "2026-05-13 01:05 PM"),
+    ("Livera", 1440, "2026-05-13 01:05 PM"),
+    ("Metus", 2880, "2026-05-13 01:05 PM"),
+    ("Baron Braudmore", 1920, "2026-05-13 01:05 PM"),
+    ("Araneo", 1440, "2026-05-13 01:05 PM"),
+    ("Undomiel", 1440, "2026-05-13 01:05 PM"),
+    ("Gareth", 1920, "2026-05-13 01:05 PM"),
+    ("Wanitas", 2880, "2026-05-13 01:05 PM"),
+    ("Duplican", 2880, "2026-05-13 01:05 PM"),
+    ("Shuliar", 2100, "2026-05-13 01:05 PM"),
+    ("Larba", 2100, "2026-05-13 01:05 PM"),
+    ("Catena", 2100, "2026-05-13 01:05 PM"),
+    ("Titore", 2220, "2026-05-13 01:05 PM"),
+    ("Asta", 3720, "2026-05-13 01:05 PM"),
+    ("Ordo", 3720, "2026-05-13 01:05 PM"),
+    ("Secreta", 3720, "2026-05-13 01:05 PM"),
+    ("Supore", 3720, "2026-05-13 01:05 PM"),
 ]
 
 # ------------------- JSON Persistence -------------------
@@ -529,8 +529,8 @@ def admin_nav(active_page: str):
 
 
 # ------------------- Streamlit Setup -------------------
-st.set_page_config(page_title="Lord9 Santiago 7 Boss Timer", layout="wide")
-st.title("🛡️ Lord9 Santiago 7 Boss Timer")
+st.set_page_config(page_title="Lord9 Santiago 2 Boss Timer", layout="wide")
+st.title("🛡️ Lord9 Santiago 2 Boss Timer")
 
 st.markdown("""
 <style>
