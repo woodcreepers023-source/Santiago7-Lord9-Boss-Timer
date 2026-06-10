@@ -104,7 +104,7 @@ default_boss_data = [
     ("General Aquleus", 1740, "2026-06-09 10:25 AM"),
     ("Amentis", 1740, "2026-06-09 10:29 AM"),
     ("Baron Braudmore", 1920, "2026-06-09 10:20 PM"),
-    ("Wannitas", 2880, "2026-06-08 02:22 PM"),
+    ("Wanitas", 2880, "2026-06-08 02:22 PM"),
     ("Metus", 2880, "2026-06-08 02:24 PM"),
     ("Duplican", 2880, "2026-06-08 02:26 PM"),
     ("Shuliar", 2100, "2026-06-08 11:16 PM"),
@@ -672,7 +672,7 @@ elif st.session_state.page == "manage":
             "Larba",
             "Catena",
             "Titore",
-            "Wannitas",
+            "Wanitas",
             "Metus",
             "Duplican",
             "Asta",
@@ -770,7 +770,7 @@ elif st.session_state.page == "instakill":
         ROW_LAYOUT = [
             ["Venatus", "Viorent", "Lady Dalia", "Ego", "Livera", "Araneo", "Undomiel"],
             ["General Aquleus", "Amentis", "Baron Braudmore", "Gareth", "Shuliar", "Larba", "Catena"],
-            ["Titore", "Wannitas", "Metus", "Duplican", "Asta", "Ordo", "Secreta", "Supore"],
+            ["Titore", "Wanitas", "Metus", "Duplican", "Asta", "Ordo", "Secreta", "Supore"],
         ]
 
         # Map timer names
