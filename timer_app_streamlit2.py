@@ -93,6 +93,7 @@ def logout_and_go_world():
 
 
 # ------------------- Default Boss Data -------------------
+default_boss_data = [
     ("Venatus", 600, "2026-07-03 06:10 AM"),
     ("Viorent", 600, "2026-07-03 06:13 AM"),
     ("Lady Dalia", 1080, "2026-07-03 02:22 AM"),
