@@ -180,7 +180,7 @@ class TimerEntry:
         self.name = name
         self.interval_minutes = int(interval_minutes)
         self.interval_seconds = self.interval_minutes * 60
-        self.last_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
+        self.last_time = datetime.strptime(str(last_time).strip(), "%Y-%m-%d %H:%M").replace(tzinfo=MANILA)
         self.next_time = self.last_time + timedelta(seconds=self.interval_seconds)
 
     def update_next(self):
