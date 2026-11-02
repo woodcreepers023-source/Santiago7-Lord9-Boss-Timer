@@ -199,22 +199,26 @@ def build_timers():
 
 # ------------------- Weekly Boss Data -------------------
 weekly_boss_data = [
-    ("Clemantis", ["Monday 11:30", "Thursday 19:00"]),
+    ("Clemantis", ["Monday 11:30", "Thursday 17:00"]),
     ("Saphirus", ["Sunday 17:00", "Tuesday 11:30"]),
     ("Neutro", ["Tuesday 19:00", "Thursday 11:30"]),
     ("Thymele", ["Monday 19:00", "Wednesday 11:30"]),
-    ("Milavy", ["Saturday 15:00"]),
-    ("Ringor", ["Saturday 17:00"]),
+    ("Milavy", ["Saturday 16:00"]),
+    ("Ringor", ["Saturday 14:00"]),
     ("Roderick", ["Friday 19:00"]),
     ("Auraq", ["Friday 22:00", "Wednesday 21:00"]),
     ("Chaiflock", ["Sunday 15:00"]),
     ("Benji", ["Sunday 21:00"]),
     ("Libitina", ["Monday 21:00", "Saturday 21:00"]),
     ("Rakajeth", ["Tuesday 22:00", "Sunday 19:00"]),
-    ("Tumier", ["Sunday 19:00"]),
+    ("Camalia", ["Thursday 21:00"]),
+    ("Tumier", ["Monday 22:00"]),
+    ("Nerocas", ["Sunday 16:00"]),
+    ("Dumenta", ["Sunday 19:00"]),
     ("Icaruthia (Kransia)", ["Tuesday 21:00", "Friday 21:00"]),
     ("Motti (Kransia)", ["Wednesday 19:00", "Saturday 19:00"]),
     ("Nevaeh (Kransia)", ["Sunday 22:00"]),
+    ("Lucus", ["Saturday 22:00"]),
 ]
 
 
