@@ -1,0 +1,895 @@
+import streamlit as st
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from streamlit_autorefresh import st_autorefresh
+import pandas as pd
+import requests
+import json
+from pathlib import Path
+import time
+
+# ------------------- Config -------------------
+MANILA = ZoneInfo("Asia/Manila")
+
+DATA_FILE = Path("boss_timers.json")
+HISTORY_FILE = Path("boss_history.json")
+WARN_FILE = Path("warn_sent.json")
+
+ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "bestgame")
+WARNING_WINDOW_SECONDS = 5 * 60  # 5 minutes
+
+# ------------------- Discord (TWO TARGETS) -------------------
+DISCORD_TARGETS = [
+    {
+        "name": "discord_1",
+        "webhook": "https://discord.com/api/webhooks/1474251528377466932/gO9aIgcH4F8-OFme1G2ghp4frY2d-1FZO5EGcLFlw5D1pdyYBUJo_FWfNf8qnCtJboXc1",
+        "role_id": "14742518525384460501",
+    },
+    {
+        "name": "discord_2",
+        "webhook": "111111",
+        "role_id": "111111",
+    },
+]
+
+
+def _post_webhook(webhook_url: str, payload: dict) -> bool:
+    if not webhook_url or "discord.com/api/webhooks/" not in webhook_url:
+        return False
+
+    try:
+        r = requests.post(webhook_url, json=payload, timeout=10)
+
+        # Discord rate limit
+        if r.status_code == 429:
+            try:
+                data = r.json()
+                retry_after = float(data.get("retry_after", 1.0))
+            except Exception:
+                retry_after = 1.0
+
+            time.sleep(min(retry_after, 2.5))
+            r = requests.post(webhook_url, json=payload, timeout=10)
+
+        return 200 <= r.status_code < 300
+    except Exception:
+        return False
+
+
+def send_discord_message_per_target(message_builder) -> dict:
+    """
+    message_builder: function(target_dict) -> message_str
+    Returns: dict {target_name: True/False}
+    """
+    results = {}
+    for target in DISCORD_TARGETS:
+        msg = message_builder(target)
+        ok = _post_webhook(target.get("webhook", ""), {"content": msg})
+        results[target.get("name", "unknown")] = ok
+    return results
+
+
+# ------------------- Helpers -------------------
+def now_manila() -> datetime:
+    return datetime.now(tz=MANILA)
+
+
+def format_timedelta(td: timedelta) -> str:
+    total_seconds = int(td.total_seconds())
+    if total_seconds < 0:
+        return "00:00:00"
+    days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if days > 0:
+        return f"{days}d {hours:02}:{minutes:02}:{seconds:02}"
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+
+def logout_and_go_world():
+    st.session_state.auth = False
+    st.session_state.username = ""
+    goto("world")
+
+
+# ------------------- Default Boss Data -------------------
+default_boss_data = [
+    ("Venatus", 600, "2026-06-10 12:22 AM"),
+    ("Viorent", 600, "2026-06-10 12:23 AM"),
+    ("Ego", 1260, "2026-06-09 08:30 PM"),
+    ("Livera", 1440, "2026-06-09 02:10 PM"),
+    ("Undomiel", 1440, "2026-06-09 02:18 PM"),
+    ("Araneo", 1440, "2026-06-09 02:15 PM"),
+    ("Lady Dalia", 1080, "2026-06-09 08:28 PM"),
+    ("General Aquleus", 1740, "2026-06-09 10:25 AM"),
+    ("Amentis", 1740, "2026-06-09 10:29 AM"),
+    ("Baron Braudmore", 1920, "2026-06-09 10:20 PM"),
+    ("Wannitas", 2880, "2026-06-08 02:22 PM"),
+    ("Metus", 2880, "2026-06-08 02:24 PM"),
+    ("Duplican", 2880, "2026-06-08 02:26 PM"),
+    ("Shuliar", 2100, "2026-06-08 11:16 PM"),
+    ("Gareth", 1920, "2026-06-09 10:23 PM"),
+    ("Titore", 2220, "2026-06-09 05:25 AM"),
+    ("Larba", 2100, "2026-06-08 11:14 PM"),
+    ("Catena", 2100, "2026-06-08 11:25 PM"),
+    ("Secreta", 3720, "2026-06-09 06:16 PM"),
+    ("Ordo", 3720, "2026-06-09 06:14 PM"),
+    ("Asta", 3720, "2026-06-09 06:13 PM"),
+    ("Supore", 3720, "2026-06-09 06:17 PM"),
+]
+
+# ------------------- JSON Persistence -------------------
+def load_boss_data():
+    if DATA_FILE.exists():
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else default_boss_data.copy()
+    return default_boss_data.copy()
+
+
+def save_boss_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+
+# ------------------- Global Warn Storage -------------------
+def load_warn_sent() -> dict:
+    if WARN_FILE.exists():
+        try:
+            with open(WARN_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def save_warn_sent(warn_dict: dict) -> None:
+    # keep the file from growing forever
+    if len(warn_dict) > 2000:
+        warn_dict = dict(list(warn_dict.items())[-1500:])
+
+    with open(WARN_FILE, "w", encoding="utf-8") as f:
+        json.dump(warn_dict, f, indent=2)
+
+
+# ------------------- Edit History -------------------
+def log_edit(boss_name: str, old_time: str, new_time: str):
+    history = []
+    if HISTORY_FILE.exists():
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            history = json.load(f)
+
+    edited_by = st.session_state.get("username", "Unknown")
+    entry = {
+        "boss": boss_name,
+        "old_time": old_time,
+        "new_time": new_time,
+        "edited_at": now_manila().strftime("%Y-%m-%d %I:%M %p"),
+        "edited_by": edited_by,
+    }
+    history.append(entry)
+
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(history, f, indent=4)
+
+
+# ------------------- Timer Class -------------------
+class TimerEntry:
+    def __init__(self, name: str, interval_minutes: int, last_time_str: str):
+        self.name = name
+        self.interval_minutes = int(interval_minutes)
+        self.interval_seconds = self.interval_minutes * 60
+        self.last_time = datetime.strptime(last_time_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=MANILA)
+        self.next_time = self.last_time + timedelta(seconds=self.interval_seconds)
+
+    def update_next(self):
+        now = now_manila()
+        while self.next_time < now:
+            self.last_time = self.next_time
+            self.next_time = self.last_time + timedelta(seconds=self.interval_seconds)
+
+    def countdown(self) -> timedelta:
+        return self.next_time - now_manila()
+
+
+def build_timers():
+    return [TimerEntry(*row) for row in load_boss_data()]
+
+
+# ------------------- Weekly Boss Data -------------------
+weekly_boss_data = [
+    ("Clemantis", ["Monday 11:30", "Thursday 19:00"]),
+    ("Saphirus", ["Sunday 17:00", "Tuesday 11:30"]),
+    ("Neutro", ["Tuesday 19:00", "Thursday 11:30"]),
+    ("Thymele", ["Monday 19:00", "Wednesday 11:30"]),
+    ("Milavy", ["Saturday 15:00"]),
+    ("Ringor", ["Saturday 17:00"]),
+    ("Roderick", ["Friday 19:00"]),
+    ("Auraq", ["Friday 22:00", "Wednesday 21:00"]),
+    ("Chaiflock", ["Sunday 15:00"]),
+    ("Benji", ["Sunday 21:00"]),
+    ("Libitina", ["Monday 21:00", "Saturday 21:00"]),
+    ("Rakajeth", ["Tuesday 22:00", "Sunday 19:00"]),
+    ("Tumier", ["Sunday 19:00"]),
+    ("Icaruthia (Kransia)", ["Tuesday 21:00", "Friday 21:00"]),
+    ("Motti (Kransia)", ["Wednesday 19:00", "Saturday 19:00"]),
+    ("Nevaeh (Kransia)", ["Sunday 22:00"]),
+]
+
+
+def get_next_weekly_spawn(day_time: str) -> datetime:
+    now = now_manila()
+    day_time = " ".join(day_time.split())
+    day, time_str = day_time.split(" ", 1)
+    target_time = datetime.strptime(time_str, "%H:%M").time()
+
+    weekday_map = {
+        "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
+        "Friday": 4, "Saturday": 5, "Sunday": 6,
+    }
+    target_weekday = weekday_map[day]
+
+    days_ahead = (target_weekday - now.weekday()) % 7
+    spawn_date = (now + timedelta(days=days_ahead)).date()
+    spawn_dt = datetime.combine(spawn_date, target_time).replace(tzinfo=MANILA)
+
+    if spawn_dt <= now:
+        spawn_dt += timedelta(days=7)
+    return spawn_dt
+
+
+# ------------------- 5-minute warning logic (NO DUPLICATES PER DISCORD) -------------------
+def _warn_key(source: str, boss_name: str, spawn_dt: datetime, target_name: str) -> str:
+    # per-target key so discord_1 and discord_2 are tracked separately
+    return f"{source}|{boss_name}|{spawn_dt.strftime('%Y-%m-%d %H:%M')}|{target_name}"
+
+
+def _claim_warn_key(warn_sent: dict, key: str) -> bool:
+    """
+    Claim the key BEFORE sending (helps avoid duplicates across multiple open sessions).
+    Returns True if we successfully claimed it (it was not set yet).
+    """
+    if warn_sent.get(key, False):
+        return False
+    warn_sent[key] = True
+    save_warn_sent(warn_sent)  # save immediately so other sessions see it
+    return True
+
+
+def send_5min_warnings(field_timers):
+    now = now_manila()
+    warn_sent = load_warn_sent()
+
+    # -------- FIELD BOSSES --------
+    for t in field_timers:
+        spawn_dt = t.next_time
+        remaining = (spawn_dt - now).total_seconds()
+
+        if 0 < remaining <= WARNING_WINDOW_SECONDS:
+            spawn_time_only = spawn_dt.strftime("%I:%M %p")
+
+            def build_msg(target):
+                role_id = target.get("role_id", "")
+                ping = f"<@&{role_id}>" if role_id and "PASTE_ROLE_ID" not in role_id else ""
+                return (
+                    f"⏳ 5-minute warning!\n"
+                    f"**{t.name}** spawns at **{spawn_time_only}** (Manila Time)\n"
+                    f"Time left: **{format_timedelta(spawn_dt - now)}**\n"
+                    f"{ping}"
+                )
+
+            for target in DISCORD_TARGETS:
+                target_name = target.get("name", "unknown")
+                key = _warn_key("FIELD", t.name, spawn_dt, target_name)
+
+                # skip if already sent (per-target)
+                if not _claim_warn_key(warn_sent, key):
+                    continue
+
+                # send to that single target
+                msg = build_msg(target)
+                ok = _post_webhook(target.get("webhook", ""), {"content": msg})
+
+                # If you WANT retries on failure, uncomment this block.
+                # If you prefer "never duplicate ever", keep it commented.
+                #
+                # if not ok:
+                #     warn_sent.pop(key, None)
+                #     save_warn_sent(warn_sent)
+
+    # -------- WEEKLY BOSSES --------
+    for boss, times in weekly_boss_data:
+        for sched in times:
+            spawn_dt = get_next_weekly_spawn(sched)
+            remaining = (spawn_dt - now).total_seconds()
+
+            if 0 < remaining <= WARNING_WINDOW_SECONDS:
+                spawn_time_only = spawn_dt.strftime("%I:%M %p")
+
+                def build_msg(target):
+                    role_id = target.get("role_id", "")
+                    ping = f"<@&{role_id}>" if role_id and "PASTE_ROLE_ID" not in role_id else ""
+                    return (
+                        f"⏳ 5-minute warning!\n"
+                        f"**{boss}** spawns at **{spawn_time_only}** (Manila Time)\n"
+                        f"Time left: **{format_timedelta(spawn_dt - now)}**\n"
+                        f"{ping}"
+                    )
+
+                for target in DISCORD_TARGETS:
+                    target_name = target.get("name", "unknown")
+                    key = _warn_key("WEEKLY", boss, spawn_dt, target_name)
+
+                    if not _claim_warn_key(warn_sent, key):
+                        continue
+
+                    msg = build_msg(target)
+                    ok = _post_webhook(target.get("webhook", ""), {"content": msg})
+
+                    # retries (optional)
+                    # if not ok:
+                    #     warn_sent.pop(key, None)
+                    #     save_warn_sent(warn_sent)
+
+
+# ------------------- Banner -------------------
+def next_boss_banner_combined(field_timers):
+    if not field_timers:
+        st.warning("No timers loaded.")
+        return
+
+    now = now_manila()
+    field_next = min(field_timers, key=lambda x: x.next_time)
+    field_cd = field_next.next_time - now
+
+    weekly_best_name = None
+    weekly_best_time = None
+    weekly_best_cd = None
+    for boss, times in weekly_boss_data:
+        for sched in times:
+            spawn_dt = get_next_weekly_spawn(sched)
+            cd = spawn_dt - now
+            if weekly_best_cd is None or cd < weekly_best_cd:
+                weekly_best_cd = cd
+                weekly_best_name = boss
+                weekly_best_time = spawn_dt
+
+    chosen_name = field_next.name
+    chosen_time = field_next.next_time
+    chosen_cd = field_cd
+    if weekly_best_cd is not None and weekly_best_cd < field_cd:
+        chosen_name = weekly_best_name
+        chosen_time = weekly_best_time
+        chosen_cd = weekly_best_cd
+
+    remaining = chosen_cd.total_seconds()
+    if remaining <= 60:
+        cd_color = "red"
+    elif remaining <= 300:
+        cd_color = "orange"
+    else:
+        cd_color = "limegreen"
+
+    time_only = chosen_time.strftime("%I:%M %p")
+    cd_str = format_timedelta(chosen_cd)
+
+    st.markdown(
+        f"""
+        <style>
+        .banner-container {{
+            display: flex;
+            justify-content: center;
+            margin: 20px 0 5px 0;
+        }}
+        .boss-banner {{
+            background: linear-gradient(90deg, #0f172a, #1d4ed8, #16a34a);
+            padding: 14px 28px;
+            border-radius: 999px;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.75);
+            color: #f9fafb;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }}
+        .boss-banner-title {{
+            font-size: 28px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: 0.03em;
+        }}
+        .boss-banner-row {{
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 18px;
+        }}
+        .banner-chip {{
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.7);
+        }}
+        </style>
+
+        <div class="banner-container">
+            <div class="boss-banner">
+                <h2 class="boss-banner-title">
+                    Next Boss: <strong>{chosen_name}</strong>
+                </h2>
+                <div class="boss-banner-row">
+                    <span class="banner-chip">
+                        🕒 <strong>{time_only}</strong>
+                    </span>
+                    <span class="banner-chip" style="color:{cd_color}; border-color:{cd_color};">
+                        ⏳ <strong>{cd_str}</strong>
+                    </span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ------------------- Tables -------------------
+def display_boss_table_sorted_newstyle(timers_list):
+    timers_sorted = sorted(timers_list, key=lambda t: t.next_time)
+
+    countdown_cells = []
+    for t in timers_sorted:
+        secs = t.countdown().total_seconds()
+        if secs <= 60:
+            color = "red"
+        elif secs <= 300:
+            color = "orange"
+        else:
+            color = "green"
+        countdown_cells.append(f"<span style='color:{color}'>{format_timedelta(t.countdown())}</span>")
+
+    data = {
+        "Boss Name": [t.name for t in timers_sorted],
+        "Interval (min)": [t.interval_minutes for t in timers_sorted],
+        "Last Spawn": [t.last_time.strftime("%m-%d-%Y | %H:%M") for t in timers_sorted],
+        "Next Spawn Date": [t.next_time.strftime("%b %d, %Y (%a)") for t in timers_sorted],
+        "Next Spawn Time": [t.next_time.strftime("%I:%M %p") for t in timers_sorted],
+        "Countdown": countdown_cells,
+    }
+
+    df = pd.DataFrame(data)
+
+    st.markdown("""
+    <style>
+    table th {
+        text-align: center !important;
+        vertical-align: middle !important;
+    }
+    table td {
+        vertical-align: middle !important;
+    }
+    table td:nth-child(2), table th:nth-child(2),
+    table td:nth-child(3), table th:nth-child(3),
+    table td:nth-child(4), table th:nth-child(4),
+    table td:nth-child(5), table th:nth-child(5),
+    table td:nth-child(6), table th:nth-child(6) {
+        text-align: center !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+
+def display_weekly_boss_table_newstyle():
+    now = now_manila()
+    upcoming = []
+    for boss, times in weekly_boss_data:
+        for sched in times:
+            spawn_dt = get_next_weekly_spawn(sched)
+            countdown = spawn_dt - now
+            upcoming.append((boss, spawn_dt, countdown))
+
+    upcoming_sorted = sorted(upcoming, key=lambda x: x[1])
+
+    data = {
+        "Boss Name": [row[0] for row in upcoming_sorted],
+        "Day": [row[1].strftime("%A") for row in upcoming_sorted],
+        "Time": [row[1].strftime("%I:%M %p") for row in upcoming_sorted],
+        "Countdown": [
+            f"<span style='color:{'red' if row[2].total_seconds() <= 60 else 'orange' if row[2].total_seconds() <= 300 else 'green'}'>{format_timedelta(row[2])}</span>"
+            for row in upcoming_sorted
+        ],
+    }
+    df = pd.DataFrame(data)
+    st.write(df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+
+# ------------------- UI Helpers -------------------
+def admin_nav(active_page: str):
+    c1, c2, c3, c4, c5, c6 = st.columns([1.2, 1.2, 1.2, 1.2, 1.2, 2.0])
+
+    with c1:
+        if st.button("⏱️ Boss Tracker", use_container_width=True):
+            goto("world")
+    with c2:
+        if st.button("💀 InstaKill", use_container_width=True):
+            goto("instakill")
+    with c3:
+        if st.button("🛠️ Manage", use_container_width=True):
+            goto("manage")
+    with c4:
+        if st.button("📜 History", use_container_width=True):
+            goto("history")
+    with c5:
+        if st.button("🚪 Logout", use_container_width=True):
+            logout_and_go_world()
+    with c6:
+        st.success(f"Admin: {st.session_state.username}")
+
+
+# ------------------- Streamlit Setup -------------------
+st.set_page_config(page_title="Lord9 Santiago 2 Boss Timer", layout="wide")
+st.title("🛡️ Lord9 Santiago 2 Boss Timer")
+
+st.markdown("""
+<style>
+div.stButton > button{
+    width: 100% !important;
+    border-radius: 12px !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 600 !important;
+    padding: 0.6rem 0.85rem !important;
+    box-shadow: none !important;
+    transition: background-color .12s ease, transform .08s ease;
+}
+div.stButton > button:hover{
+    background: #e2e8f0 !important;
+}
+div.stButton > button:active{
+    transform: translateY(1px);
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ------------------- Session defaults -------------------
+st.session_state.setdefault("auth", False)
+st.session_state.setdefault("username", "")
+st.session_state.setdefault("page", "world")  # world | login | manage | history | instakill
+st.session_state.setdefault("manage_saved_msgs", {})
+st.session_state.setdefault("ik_toast", None)
+
+
+def goto(page_name: str):
+    if st.session_state.page == "manage" and page_name != "manage":
+        st.session_state.manage_saved_msgs = {}
+    st.session_state.page = page_name
+    st.rerun()
+
+
+# ------------------- Auto-refresh ONLY on World page -------------------
+if st.session_state.page == "world":
+    st_autorefresh(interval=1000, key="timer_refresh")
+
+
+# ------------------- Load timers -------------------
+if "timers" not in st.session_state:
+    st.session_state.timers = build_timers()
+
+timers = st.session_state.timers
+for t in timers:
+    t.update_next()
+
+if st.session_state.page == "world":
+    send_5min_warnings(timers)
+
+
+# ------------------- WORLD PAGE HEADER -------------------
+if st.session_state.page == "world":
+    left_btn, mid_banner, right_space = st.columns([2, 6, 2])
+
+    with left_btn:
+        if not st.session_state.auth:
+            if st.button("🔐 Admin Login"):
+                goto("login")
+        else:
+            if st.button("🛠️ Manage / Edit"):
+                goto("manage")
+
+    with mid_banner:
+        next_boss_banner_combined(timers)
+else:
+    next_boss_banner_combined(timers)
+
+st.divider()
+
+
+# ------------------- WORLD PAGE CONTENT -------------------
+if st.session_state.page == "world":
+    st.subheader("🗡️ Field Boss Spawns (Sorted by Next Spawn)")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        display_boss_table_sorted_newstyle(timers)
+    with col2:
+        st.subheader("📅 Weekly Boss Spawns (Auto-Sorted)")
+        display_weekly_boss_table_newstyle()
+
+
+# ------------------- LOGIN PAGE -------------------
+elif st.session_state.page == "login":
+    st.subheader("🔐 Login (Edit Access)")
+    st.caption("Auto-refresh is paused here so the page won’t fold while you type.")
+
+    with st.form("login_form_page"):
+        username_in = st.text_input("Name", key="login_username_page")
+        password_in = st.text_input("Password", type="password", key="login_password_page")
+        login_clicked = st.form_submit_button("Login", use_container_width=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("⬅️ Back", use_container_width=True):
+            goto("world")
+
+    if login_clicked:
+        if password_in == ADMIN_PASSWORD and username_in.strip():
+            st.session_state.auth = True
+            st.session_state.username = username_in.strip()
+            st.success(f"✅ Access granted for {st.session_state.username}")
+            goto("manage")
+        else:
+            st.error("❌ Invalid name or password.")
+
+
+# ------------------- MANAGE PAGE -------------------
+elif st.session_state.page == "manage":
+    if not st.session_state.auth:
+        st.warning("You must login first.")
+        if st.button("Go to Login", use_container_width=True):
+            goto("login")
+    else:
+        admin_nav("manage")
+
+        st.subheader("🛠️ Edit Boss Timers (Edit Last Time, Next auto-updates)")
+
+        # ✅ YOUR CUSTOM ORDER
+        CUSTOM_MANAGE_ORDER = [
+            "Venatus",
+            "Viorent",
+            "Lady Dalia",
+            "Ego",
+            "Livera",
+            "Araneo",
+            "Undomiel",
+            "General Aquleus",
+            "Amentis",
+            "Baron Braudmore",
+            "Gareth",
+            "Shuliar",
+            "Larba",
+            "Catena",
+            "Titore",
+            "Wannitas",
+            "Metus",
+            "Duplican",
+            "Asta",
+            "Ordo",
+            "Secreta",
+            "Supore",
+        ]
+
+        # ✅ Create order map
+        order_index = {name: i for i, name in enumerate(CUSTOM_MANAGE_ORDER)}
+
+        # ✅ Sort timers based on your custom order
+        timers_sorted = sorted(timers, key=lambda x: order_index.get(x.name, 999))
+
+        for timer in timers_sorted:
+            i = timers.index(timer)  # IMPORTANT: keep correct index for saving
+
+            with st.expander(f"Edit {timer.name}", expanded=False):
+                new_date = st.date_input(
+                    f"{timer.name} Last Date",
+                    value=timer.last_time.date(),
+                    key=f"{timer.name}_last_date",
+                )
+
+                new_time = st.time_input(
+                    f"{timer.name} Last Time",
+                    value=timer.last_time.time(),
+                    key=f"{timer.name}_last_time",
+                    step=60,
+                )
+
+                if st.button(f"Save {timer.name}", key=f"save_{timer.name}"):
+                    old_time_str = timer.last_time.strftime("%Y-%m-%d %I:%M %p")
+
+                    updated_last_time = datetime.combine(new_date, new_time).replace(tzinfo=MANILA)
+                    updated_next_time = updated_last_time + timedelta(seconds=timer.interval_seconds)
+
+                    st.session_state.timers[i].last_time = updated_last_time
+                    st.session_state.timers[i].next_time = updated_next_time
+
+                    save_boss_data([
+                        (t.name, t.interval_minutes, t.last_time.strftime("%Y-%m-%d %I:%M %p"))
+                        for t in st.session_state.timers
+                    ])
+
+                    log_edit(timer.name, old_time_str, updated_last_time.strftime("%Y-%m-%d %I:%M %p"))
+
+                    st.session_state.manage_saved_msgs[timer.name] = (
+                        f"✅ {timer.name} updated! Next: {updated_next_time.strftime('%Y-%m-%d %I:%M %p')}"
+                    )
+
+                    st.rerun()
+
+                msg = st.session_state.manage_saved_msgs.get(timer.name)
+                if msg:
+                    st.success(msg)
+
+
+# ------------------- HISTORY PAGE -------------------
+elif st.session_state.page == "history":
+    if not st.session_state.auth:
+        st.warning("You must login first.")
+        if st.button("Go to Login", use_container_width=True):
+            goto("login")
+    else:
+        admin_nav("history")
+
+        st.subheader("📜 Edit History")
+
+        if HISTORY_FILE.exists():
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                history = json.load(f)
+
+            if history:
+                df_history = pd.DataFrame(history).sort_values("edited_at", ascending=False)
+                st.dataframe(df_history, use_container_width=True)
+            else:
+                st.info("No edits yet.")
+        else:
+            st.info("No edit history yet.")
+
+
+# ------------------- INSTAKILL PAGE -------------------
+elif st.session_state.page == "instakill":
+    if not st.session_state.auth:
+        st.warning("You must login first.")
+        if st.button("Go to Login", use_container_width=True):
+            goto("login")
+    else:
+        admin_nav("instakill")
+
+        st.subheader("💀 InstaKill")
+
+        # ✅ PERFECT CUSTOM ROW LAYOUT
+        ROW_LAYOUT = [
+            ["Venatus", "Viorent", "Lady Dalia", "Ego", "Livera", "Araneo", "Undomiel"],
+            ["General Aquleus", "Amentis", "Baron Braudmore", "Gareth", "Shuliar", "Larba", "Catena"],
+            ["Titore", "Wannitas", "Metus", "Duplican", "Asta", "Ordo", "Secreta", "Supore"],
+        ]
+
+        # Map timer names
+        name_to_timer = {t.name: t for t in timers}
+
+        st.markdown("""
+        <style>
+        .ik-card{
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          padding: 16px 14px 14px 14px;
+          text-align: center;
+          margin-bottom: 14px;
+        }
+
+        .ik-name{
+          font-size: 13px;
+          font-weight: 800;
+          letter-spacing: .18em;
+          color: #111827;
+          text-transform: uppercase;
+          padding: 6px 0 10px 0;
+        }
+
+        .ik-card div.stButton > button{
+          margin-top: 6px !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # ✅ MANUAL ROW RENDERING
+        for row in ROW_LAYOUT:
+            cols = st.columns(len(row))
+
+            for i, boss_name in enumerate(row):
+                with cols[i]:
+
+                    t = name_to_timer.get(boss_name)
+
+                    if not t:
+                        st.empty()
+                        continue
+
+                    st.markdown(
+                        f"<div class='ik-card'><div class='ik-name'>{t.name}</div>",
+                        unsafe_allow_html=True
+                    )
+
+                    clicked = st.button(
+                        "Killed Now",
+                        key=f"ik_{t.name}",
+                        use_container_width=True
+                    )
+
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                    if clicked:
+                        old_time_str = t.last_time.strftime("%Y-%m-%d %I:%M %p")
+
+                        updated_last = now_manila()
+                        updated_next = updated_last + timedelta(seconds=t.interval_seconds)
+
+                        killer = st.session_state.get("username", "Unknown")
+                        spawn_str = updated_next.strftime("%B %d, %Y | %I:%M %p")
+
+                        msg = (
+                            f"💀 **{t.name}** has been killed.\n"
+                            f"Next spawn: **{spawn_str}** (Manila Time)\n"
+                            f"Updated by {killer}"
+                        )
+
+                        # Send to Discord targets
+                        for target in DISCORD_TARGETS:
+                            _post_webhook(target.get("webhook", ""), {"content": msg})
+
+                        # Update timer in session
+                        for idx, obj in enumerate(st.session_state.timers):
+                            if obj.name == t.name:
+                                st.session_state.timers[idx].last_time = updated_last
+                                st.session_state.timers[idx].next_time = updated_next
+                                break
+
+                        # Save updated data
+                        save_boss_data([
+                            (
+                                x.name,
+                                x.interval_minutes,
+                                x.last_time.strftime("%Y-%m-%d %I:%M %p")
+                            )
+                            for x in st.session_state.timers
+                        ])
+
+                        # Log history
+                        log_edit(
+                            t.name,
+                            old_time_str,
+                            updated_last.strftime("%Y-%m-%d %I:%M %p")
+                        )
+
+                        # Success toast
+                        st.session_state.ik_toast = {
+                            "msg": (
+                                f"✅ {t.name} updated! "
+                                f"Next: {updated_next.strftime('%Y-%m-%d %I:%M %p')}"
+                            ),
+                            "ts": now_manila(),
+                        }
+
+                        st.rerun()
+
+        # ✅ Toast popup
+        if st.session_state.ik_toast:
+            toast = st.session_state.ik_toast
+            age = (now_manila() - toast["ts"]).total_seconds()
+
+            st.success(toast["msg"])
+            st_autorefresh(interval=500, key="ik_refresh")
+
+            if age >= 2.5:
+                st.session_state.ik_toast = None
+                st.rerun()
