@@ -213,10 +213,12 @@ weekly_boss_data = [
     ("Rakajeth", ["Tuesday 22:00", "Sunday 19:00"]),
     ("Camalia", ["Thursday 21:00"]),
     ("Tumier", ["Sunday 19:00"]),
-    ("Lucus", ["Saturday 22:00"]),
+    ("Nerucas", ["Sunday 16:00"]),
+    ("Dumenta", ["Sunday 19:00"]),
     ("Icaruthia (Kransia)", ["Tuesday 21:00", "Friday 21:00"]),
     ("Motti (Kransia)", ["Wednesday 19:00", "Saturday 19:00"]),
     ("Nevaeh (Kransia)", ["Sunday 22:00"]),
+    ("Lucus", ["Saturday 22:00"]),
 ]
 
 
