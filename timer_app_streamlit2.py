@@ -210,7 +210,7 @@ weekly_boss_data = [
     ("Chaiflock", ["Sunday 15:00"]),
     ("Benji", ["Sunday 21:00"]),
     ("Libitina", ["Monday 21:00", "Saturday 21:00"]),
-    ("Rakajeth", ["Tuesday 22:00", "Sunday 19:00"]),
+    ("Rakajeth", ["Tuesday 22:00", "Thursday 19:00"]),
     ("Camalia", ["Thursday 21:00"]),
     ("Tumier", ["Monday 22:00"]),
     ("Nerocas", ["Sunday 16:00"]),
